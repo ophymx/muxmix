@@ -1,0 +1,1330 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/$defs/ffprobeType",
+  "$defs": {
+    "StreamGroupsType": {
+      "type": "object",
+      "properties": {
+        "stream_group": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/streamGroupType"
+          }
+        }
+      }
+    },
+    "chapterType": {
+      "type": "object",
+      "properties": {
+        "end": {
+          "type": "integer"
+        },
+        "end_time": {
+          "type": "number"
+        },
+        "id": {
+          "type": "integer"
+        },
+        "start": {
+          "type": "integer"
+        },
+        "start_time": {
+          "type": "number"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/tagsType"
+          }
+        },
+        "time_base": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "time_base",
+        "start",
+        "end",
+        "end_time"
+      ]
+    },
+    "chaptersType": {
+      "type": "object",
+      "properties": {
+        "chapter": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/chapterType"
+          }
+        }
+      }
+    },
+    "errorType": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer"
+        },
+        "string": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "string"
+      ]
+    },
+    "ffprobeType": {
+      "type": "object",
+      "properties": {
+        "chapters": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/chapterType"
+          }
+        },
+        "error": {
+          "$ref": "#/$defs/errorType"
+        },
+        "format": {
+          "$ref": "#/$defs/formatType"
+        },
+        "frames": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/frameType"
+              },
+              {
+                "$ref": "#/$defs/subtitleType"
+              }
+            ]
+          }
+        },
+        "library_versions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/libraryVersionType"
+          }
+        },
+        "packets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/packetType"
+          }
+        },
+        "packets_and_frames": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/packetType"
+              },
+              {
+                "$ref": "#/$defs/frameType"
+              },
+              {
+                "$ref": "#/$defs/subtitleType"
+              }
+            ]
+          }
+        },
+        "pixel_formats": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pixelFormatType"
+          }
+        },
+        "program_version": {
+          "$ref": "#/$defs/programVersionType"
+        },
+        "programs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/programType"
+          }
+        },
+        "stream_groups": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/streamGroupType"
+          }
+        },
+        "streams": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/streamType"
+          }
+        }
+      }
+    },
+    "formatType": {
+      "type": "object",
+      "properties": {
+        "bit_rate": {
+          "type": "string"
+        },
+        "duration": {
+          "type": "string"
+        },
+        "filename": {
+          "type": "string"
+        },
+        "format_long_name": {
+          "type": "string"
+        },
+        "format_name": {
+          "type": "string"
+        },
+        "nb_programs": {
+          "type": "integer"
+        },
+        "nb_stream_groups": {
+          "type": "integer"
+        },
+        "nb_streams": {
+          "type": "integer"
+        },
+        "probe_score": {
+          "type": "integer"
+        },
+        "size": {
+          "type": "string"
+        },
+        "start_time": {
+          "type": "string"
+        },
+        "tags": {
+          "$ref": "#/$defs/tagsType"
+        }
+      },
+      "required": [
+        "filename",
+        "nb_streams",
+        "nb_programs",
+        "nb_stream_groups",
+        "format_name"
+      ]
+    },
+    "frameSideDataComponentList": {
+      "type": "object",
+      "properties": {
+        "component": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/frameSideDataComponentType"
+          }
+        }
+      }
+    },
+    "frameSideDataComponentType": {
+      "type": "object",
+      "properties": {
+        "pieces": {
+          "$ref": "#/$defs/frameSideDataPieceList"
+        },
+        "side_datum": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/frameSideDatumType"
+          }
+        }
+      }
+    },
+    "frameSideDataListType": {
+      "type": "object",
+      "properties": {
+        "side_data": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/frameSideDataType"
+          },
+          "minItems": 1
+        }
+      },
+      "required": [
+        "side_data"
+      ]
+    },
+    "frameSideDataPieceList": {
+      "type": "object",
+      "properties": {
+        "piece": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/frameSideDataPieceType"
+          }
+        }
+      }
+    },
+    "frameSideDataPieceType": {
+      "type": "object",
+      "properties": {
+        "side_datum": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/frameSideDatumType"
+          }
+        }
+      }
+    },
+    "frameSideDataTimecodeList": {
+      "type": "object",
+      "properties": {
+        "timecode": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/frameSideDataTimecodeType"
+          }
+        }
+      }
+    },
+    "frameSideDataTimecodeType": {
+      "type": "object",
+      "properties": {
+        "value": {
+          "type": "string"
+        }
+      }
+    },
+    "frameSideDataType": {
+      "type": "object",
+      "properties": {
+        "components": {
+          "$ref": "#/$defs/frameSideDataComponentList"
+        },
+        "side_data_size": {
+          "type": "integer"
+        },
+        "side_data_type": {
+          "type": "string"
+        },
+        "side_datum": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/frameSideDatumType"
+          }
+        },
+        "timecode": {
+          "type": "string"
+        },
+        "timecodes": {
+          "$ref": "#/$defs/frameSideDataTimecodeList"
+        }
+      }
+    },
+    "frameSideDatumType": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      }
+    },
+    "frameType": {
+      "type": "object",
+      "properties": {
+        "best_effort_timestamp": {
+          "type": "integer"
+        },
+        "best_effort_timestamp_time": {
+          "type": "number"
+        },
+        "channel_layout": {
+          "type": "string"
+        },
+        "channels": {
+          "type": "integer"
+        },
+        "chroma_location": {
+          "type": "string"
+        },
+        "color_primaries": {
+          "type": "string"
+        },
+        "color_range": {
+          "type": "string"
+        },
+        "color_space": {
+          "type": "string"
+        },
+        "color_transfer": {
+          "type": "string"
+        },
+        "crop_bottom": {
+          "type": "integer"
+        },
+        "crop_left": {
+          "type": "integer"
+        },
+        "crop_right": {
+          "type": "integer"
+        },
+        "crop_top": {
+          "type": "integer"
+        },
+        "duration": {
+          "type": "integer"
+        },
+        "duration_time": {
+          "type": "number"
+        },
+        "height": {
+          "type": "integer"
+        },
+        "interlaced_frame": {
+          "type": "integer"
+        },
+        "key_frame": {
+          "type": "integer"
+        },
+        "logs": {
+          "$ref": "#/$defs/logsType"
+        },
+        "media_type": {
+          "type": "string"
+        },
+        "nb_samples": {
+          "type": "integer"
+        },
+        "pict_type": {
+          "type": "string"
+        },
+        "pix_fmt": {
+          "type": "string"
+        },
+        "pkt_dts": {
+          "type": "integer"
+        },
+        "pkt_dts_time": {
+          "type": "number"
+        },
+        "pkt_pos": {
+          "type": "integer"
+        },
+        "pkt_size": {
+          "type": "integer"
+        },
+        "pts": {
+          "type": "integer"
+        },
+        "pts_time": {
+          "type": "number"
+        },
+        "repeat_pict": {
+          "type": "integer"
+        },
+        "sample_aspect_ratio": {
+          "type": "string"
+        },
+        "sample_fmt": {
+          "type": "string"
+        },
+        "side_data_list": {
+          "$ref": "#/$defs/frameSideDataListType"
+        },
+        "stream_index": {
+          "type": "integer"
+        },
+        "tags": {
+          "$ref": "#/$defs/tagsType"
+        },
+        "top_field_first": {
+          "type": "integer"
+        },
+        "width": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "media_type",
+        "key_frame"
+      ]
+    },
+    "framesType": {
+      "type": "object",
+      "properties": {
+        "frame": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/frameType"
+          }
+        },
+        "subtitle": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/subtitleType"
+          }
+        }
+      }
+    },
+    "libraryVersionType": {
+      "type": "object",
+      "properties": {
+        "ident": {
+          "type": "string"
+        },
+        "major": {
+          "type": "integer"
+        },
+        "micro": {
+          "type": "integer"
+        },
+        "minor": {
+          "type": "integer"
+        },
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "major",
+        "minor",
+        "micro",
+        "version",
+        "ident"
+      ]
+    },
+    "libraryVersionsType": {
+      "type": "object",
+      "properties": {
+        "library_version": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/libraryVersionType"
+          }
+        }
+      }
+    },
+    "logType": {
+      "type": "object",
+      "properties": {
+        "category": {
+          "type": "integer"
+        },
+        "context": {
+          "type": "string"
+        },
+        "level": {
+          "type": "integer"
+        },
+        "message": {
+          "type": "string"
+        },
+        "parent_category": {
+          "type": "integer"
+        },
+        "parent_context": {
+          "type": "string"
+        }
+      }
+    },
+    "logsType": {
+      "type": "object",
+      "properties": {
+        "log": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/logType"
+          },
+          "minItems": 1
+        }
+      },
+      "required": [
+        "log"
+      ]
+    },
+    "packetSideDataListType": {
+      "type": "object",
+      "properties": {
+        "side_data": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/packetSideDataType"
+          },
+          "minItems": 1
+        }
+      },
+      "required": [
+        "side_data"
+      ]
+    },
+    "packetSideDataType": {
+      "type": "object",
+      "properties": {
+        "side_datum": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/packetSideDatumType"
+          },
+          "minItems": 1
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "side_datum"
+      ]
+    },
+    "packetSideDatumType": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      }
+    },
+    "packetType": {
+      "type": "object",
+      "properties": {
+        "codec_type": {
+          "type": "string"
+        },
+        "data": {
+          "type": "string"
+        },
+        "data_hash": {
+          "type": "string"
+        },
+        "dts": {
+          "type": "integer"
+        },
+        "dts_time": {
+          "type": "string"
+        },
+        "duration": {
+          "type": "integer"
+        },
+        "duration_time": {
+          "type": "string"
+        },
+        "flags": {
+          "type": "string"
+        },
+        "pos": {
+          "type": "integer"
+        },
+        "pts": {
+          "type": "integer"
+        },
+        "pts_time": {
+          "type": "string"
+        },
+        "side_data_list": {
+          "$ref": "#/$defs/packetSideDataListType"
+        },
+        "size": {
+          "type": "integer"
+        },
+        "stream_index": {
+          "type": "integer"
+        },
+        "tags": {
+          "$ref": "#/$defs/tagsType"
+        }
+      },
+      "required": [
+        "codec_type",
+        "stream_index",
+        "size",
+        "flags"
+      ]
+    },
+    "packetsAndFramesType": {
+      "type": "object",
+      "properties": {
+        "frame": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/frameType"
+          }
+        },
+        "packet": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/packetType"
+          }
+        },
+        "subtitle": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/subtitleType"
+          }
+        }
+      }
+    },
+    "packetsType": {
+      "type": "object",
+      "properties": {
+        "packet": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/packetType"
+          }
+        }
+      }
+    },
+    "pixelFormatComponentType": {
+      "type": "object",
+      "properties": {
+        "bit_depth": {
+          "type": "integer"
+        },
+        "index": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "index",
+        "bit_depth"
+      ]
+    },
+    "pixelFormatComponentsType": {
+      "type": "object",
+      "properties": {
+        "component": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pixelFormatComponentType"
+          }
+        }
+      }
+    },
+    "pixelFormatFlagsType": {
+      "type": "object",
+      "properties": {
+        "alpha": {
+          "type": "integer"
+        },
+        "big_endian": {
+          "type": "integer"
+        },
+        "bitstream": {
+          "type": "integer"
+        },
+        "hwaccel": {
+          "type": "integer"
+        },
+        "palette": {
+          "type": "integer"
+        },
+        "planar": {
+          "type": "integer"
+        },
+        "rgb": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "big_endian",
+        "palette",
+        "bitstream",
+        "hwaccel",
+        "planar",
+        "rgb",
+        "alpha"
+      ]
+    },
+    "pixelFormatType": {
+      "type": "object",
+      "properties": {
+        "bits_per_pixel": {
+          "type": "integer"
+        },
+        "components": {
+          "$ref": "#/$defs/pixelFormatComponentsType"
+        },
+        "flags": {
+          "$ref": "#/$defs/pixelFormatFlagsType"
+        },
+        "log2_chroma_h": {
+          "type": "integer"
+        },
+        "log2_chroma_w": {
+          "type": "integer"
+        },
+        "name": {
+          "type": "string"
+        },
+        "nb_components": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "nb_components"
+      ]
+    },
+    "pixelFormatsType": {
+      "type": "object",
+      "properties": {
+        "pixel_format": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pixelFormatType"
+          }
+        }
+      }
+    },
+    "programType": {
+      "type": "object",
+      "properties": {
+        "nb_streams": {
+          "type": "integer"
+        },
+        "pcr_pid": {
+          "type": "integer"
+        },
+        "pmt_pid": {
+          "type": "integer"
+        },
+        "program_id": {
+          "type": "integer"
+        },
+        "program_num": {
+          "type": "integer"
+        },
+        "streams": {
+          "$ref": "#/$defs/streamsType"
+        },
+        "tags": {
+          "$ref": "#/$defs/tagsType"
+        }
+      },
+      "required": [
+        "program_id",
+        "program_num",
+        "nb_streams",
+        "pmt_pid",
+        "pcr_pid"
+      ]
+    },
+    "programVersionType": {
+      "type": "object",
+      "properties": {
+        "build_date": {
+          "type": "string"
+        },
+        "build_time": {
+          "type": "string"
+        },
+        "compiler_ident": {
+          "type": "string"
+        },
+        "configuration": {
+          "type": "string"
+        },
+        "copyright": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "version",
+        "copyright",
+        "compiler_ident",
+        "configuration"
+      ]
+    },
+    "programsType": {
+      "type": "object",
+      "properties": {
+        "program": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/programType"
+          }
+        }
+      }
+    },
+    "streamDispositionType": {
+      "type": "object",
+      "properties": {
+        "attached_pic": {
+          "type": "integer"
+        },
+        "captions": {
+          "type": "integer"
+        },
+        "clean_effects": {
+          "type": "integer"
+        },
+        "comment": {
+          "type": "integer"
+        },
+        "default": {
+          "type": "integer"
+        },
+        "dependent": {
+          "type": "integer"
+        },
+        "descriptions": {
+          "type": "integer"
+        },
+        "dub": {
+          "type": "integer"
+        },
+        "forced": {
+          "type": "integer"
+        },
+        "hearing_impaired": {
+          "type": "integer"
+        },
+        "karaoke": {
+          "type": "integer"
+        },
+        "lyrics": {
+          "type": "integer"
+        },
+        "metadata": {
+          "type": "integer"
+        },
+        "multilayer": {
+          "type": "integer"
+        },
+        "non_diegetic": {
+          "type": "integer"
+        },
+        "original": {
+          "type": "integer"
+        },
+        "still_image": {
+          "type": "integer"
+        },
+        "timed_thumbnails": {
+          "type": "integer"
+        },
+        "visual_impaired": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "default",
+        "dub",
+        "original",
+        "comment",
+        "lyrics",
+        "karaoke",
+        "forced",
+        "hearing_impaired",
+        "visual_impaired",
+        "clean_effects",
+        "attached_pic",
+        "timed_thumbnails",
+        "non_diegetic",
+        "captions",
+        "descriptions",
+        "metadata",
+        "dependent",
+        "still_image",
+        "multilayer"
+      ]
+    },
+    "streamGroupBlockList": {
+      "type": "object",
+      "properties": {
+        "block": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/streamGroupBlockType"
+          }
+        }
+      }
+    },
+    "streamGroupBlockType": {
+      "type": "object",
+      "properties": {
+        "block_entry": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/streamGroupEntryType"
+          }
+        }
+      }
+    },
+    "streamGroupComponentList": {
+      "type": "object",
+      "properties": {
+        "component": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/streamGroupComponentType"
+          }
+        }
+      }
+    },
+    "streamGroupComponentType": {
+      "type": "object",
+      "properties": {
+        "component_entry": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/streamGroupEntryType"
+          }
+        },
+        "subcomponents": {
+          "$ref": "#/$defs/streamGroupSubComponentList"
+        }
+      }
+    },
+    "streamGroupEntryType": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      }
+    },
+    "streamGroupPieceList": {
+      "type": "object",
+      "properties": {
+        "piece": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/streamGroupPieceType"
+          }
+        }
+      }
+    },
+    "streamGroupPieceType": {
+      "type": "object",
+      "properties": {
+        "piece_entry": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/streamGroupEntryType"
+          }
+        },
+        "subpieces": {
+          "$ref": "#/$defs/streamGroupSubPieceList"
+        }
+      }
+    },
+    "streamGroupSubComponentList": {
+      "type": "object",
+      "properties": {
+        "subcomponent": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/streamGroupSubComponentType"
+          }
+        }
+      }
+    },
+    "streamGroupSubComponentType": {
+      "type": "object",
+      "properties": {
+        "pieces": {
+          "$ref": "#/$defs/streamGroupPieceList"
+        },
+        "subcomponent_entry": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/streamGroupEntryType"
+          }
+        }
+      }
+    },
+    "streamGroupSubPieceList": {
+      "type": "object",
+      "properties": {
+        "subpiece": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/streamGroupSubPieceType"
+          }
+        }
+      }
+    },
+    "streamGroupSubPieceType": {
+      "type": "object",
+      "properties": {
+        "blocks": {
+          "$ref": "#/$defs/streamGroupBlockList"
+        },
+        "subpiece_entry": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/streamGroupEntryType"
+          }
+        }
+      }
+    },
+    "streamGroupType": {
+      "type": "object",
+      "properties": {
+        "components": {
+          "$ref": "#/$defs/streamGroupComponentList"
+        },
+        "disposition": {
+          "$ref": "#/$defs/streamDispositionType"
+        },
+        "index": {
+          "type": "integer"
+        },
+        "nb_streams": {
+          "type": "integer"
+        },
+        "streams": {
+          "$ref": "#/$defs/streamsType"
+        },
+        "tags": {
+          "$ref": "#/$defs/tagsType"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "index",
+        "nb_streams",
+        "type"
+      ]
+    },
+    "streamType": {
+      "type": "object",
+      "properties": {
+        "avg_frame_rate": {
+          "type": "string"
+        },
+        "bit_rate": {
+          "type": "string"
+        },
+        "bits_per_raw_sample": {
+          "type": "string"
+        },
+        "bits_per_sample": {
+          "type": "integer"
+        },
+        "channel_layout": {
+          "type": "string"
+        },
+        "channels": {
+          "type": "integer"
+        },
+        "chroma_location": {
+          "type": "string"
+        },
+        "closed_captions": {
+          "type": "integer"
+        },
+        "codec_long_name": {
+          "type": "string"
+        },
+        "codec_name": {
+          "type": "string"
+        },
+        "codec_tag": {
+          "type": "string"
+        },
+        "codec_tag_string": {
+          "type": "string"
+        },
+        "codec_type": {
+          "type": "string"
+        },
+        "coded_height": {
+          "type": "integer"
+        },
+        "coded_width": {
+          "type": "integer"
+        },
+        "color_primaries": {
+          "type": "string"
+        },
+        "color_range": {
+          "type": "string"
+        },
+        "color_space": {
+          "type": "string"
+        },
+        "color_transfer": {
+          "type": "string"
+        },
+        "display_aspect_ratio": {
+          "type": "string"
+        },
+        "disposition": {
+          "$ref": "#/$defs/streamDispositionType"
+        },
+        "duration": {
+          "type": "string"
+        },
+        "duration_ts": {
+          "type": "integer"
+        },
+        "extradata": {
+          "type": "string"
+        },
+        "extradata_hash": {
+          "type": "string"
+        },
+        "extradata_size": {
+          "type": "integer"
+        },
+        "field_order": {
+          "type": "string"
+        },
+        "film_grain": {
+          "type": "integer"
+        },
+        "has_b_frames": {
+          "type": "integer"
+        },
+        "height": {
+          "type": "integer"
+        },
+        "id": {
+          "type": "string"
+        },
+        "index": {
+          "type": "integer"
+        },
+        "initial_padding": {
+          "type": "integer"
+        },
+        "level": {
+          "type": "integer"
+        },
+        "max_bit_rate": {
+          "type": "string"
+        },
+        "nb_frames": {
+          "type": "string"
+        },
+        "nb_read_frames": {
+          "type": "string"
+        },
+        "nb_read_packets": {
+          "type": "string"
+        },
+        "pix_fmt": {
+          "type": "string"
+        },
+        "profile": {
+          "type": "string"
+        },
+        "r_frame_rate": {
+          "type": "string"
+        },
+        "refs": {
+          "type": "integer"
+        },
+        "sample_aspect_ratio": {
+          "type": "string"
+        },
+        "sample_fmt": {
+          "type": "string"
+        },
+        "sample_rate": {
+          "type": "string"
+        },
+        "side_data_list": {
+          "$ref": "#/$defs/packetSideDataListType"
+        },
+        "start_pts": {
+          "type": "integer"
+        },
+        "start_time": {
+          "type": "string"
+        },
+        "tags": {
+          "$ref": "#/$defs/tagsType"
+        },
+        "time_base": {
+          "type": "string"
+        },
+        "width": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "index",
+        "codec_tag",
+        "codec_tag_string",
+        "r_frame_rate",
+        "avg_frame_rate",
+        "time_base"
+      ]
+    },
+    "streamsType": {
+      "type": "object",
+      "properties": {
+        "stream": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/streamType"
+          }
+        }
+      }
+    },
+    "subtitleType": {
+      "type": "object",
+      "properties": {
+        "end_display_time": {
+          "type": "integer"
+        },
+        "format": {
+          "type": "integer"
+        },
+        "media_type": {
+          "type": "string"
+        },
+        "num_rects": {
+          "type": "integer"
+        },
+        "pts": {
+          "type": "integer"
+        },
+        "pts_time": {
+          "type": "number"
+        },
+        "start_display_time": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "media_type"
+      ]
+    },
+    "tagType": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "value"
+      ]
+    },
+    "tagsType": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    }
+  }
+}

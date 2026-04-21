@@ -1,0 +1,107 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "FilterGraph",
+  "description": "An FFmpeg filtergraph consisting of one or more filter chains.",
+  "$ref": "#/$defs/FilterGraph",
+  "$defs": {
+    "FilterGraph": {
+      "type": "object",
+      "properties": {
+        "chains": {
+          "description": "The filter chains that make up the filtergraph. Chains are separated by ';' in the FFmpeg filtergraph string.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FilterChain"
+          },
+          "minItems": 1
+        },
+        "sws_flags": {
+          "description": "Global scaling flags passed to libswscale (e.g. 'lanczos', 'bicubic'). Prepended as 'sws_flags=<value>;' in the filtergraph string.",
+          "type": "string"
+        }
+      },
+      "required": ["chains"],
+      "additionalProperties": false
+    },
+    "FilterChain": {
+      "type": "object",
+      "description": "A linear sequence of filters. Adjacent filters are connected implicitly; filters are separated by ',' in the FFmpeg filtergraph string.",
+      "properties": {
+        "filters": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Filter"
+          },
+          "minItems": 1
+        }
+      },
+      "required": ["filters"],
+      "additionalProperties": false
+    },
+    "Filter": {
+      "type": "object",
+      "description": "A single FFmpeg filter with optional input/output stream labels and arguments.",
+      "properties": {
+        "input_labels": {
+          "description": "Stream labels consumed by this filter (e.g. '[main]', '[0:v]'). Rendered as '[label]' before the filter name.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Label"
+          },
+          "default": []
+        },
+        "name": {
+          "description": "The FFmpeg filter name (e.g. 'scale', 'fps', 'overlay').",
+          "type": "string",
+          "pattern": "^[a-zA-Z][a-zA-Z0-9_]*$"
+        },
+        "instance": {
+          "description": "Optional instance identifier appended as '@<instance>' to distinguish multiple uses of the same filter.",
+          "type": "string",
+          "pattern": "^[a-zA-Z][a-zA-Z0-9_]*$"
+        },
+        "args": {
+          "description": "Arguments to pass to the filter. Either an object for key=value pairs (KVArgs) or an array for positional arguments (PositionalArgs).",
+          "oneOf": [
+            {
+              "$ref": "#/$defs/KVArgs"
+            },
+            {
+              "$ref": "#/$defs/PositionalArgs"
+            }
+          ]
+        },
+        "output_labels": {
+          "description": "Stream labels produced by this filter. Rendered as '[label]' after the filter and its arguments.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Label"
+          },
+          "default": []
+        }
+      },
+      "required": ["input_labels", "name", "output_labels"],
+      "additionalProperties": false
+    },
+    "KVArgs": {
+      "description": "Key-value filter arguments. Each entry is serialized as 'key=value' and joined with ':'. An empty string value renders the key as a flag (no '=value').",
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "PositionalArgs": {
+      "description": "Positional filter arguments joined with ':'. Used by filters like 'format' that accept values without keys.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    },
+    "Label": {
+      "description": "A stream label used to connect filters across chains. May also be an FFmpeg input stream specifier such as '0:v' or '1:a'.",
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9_:]+$"
+    }
+  }
+}
