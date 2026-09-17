@@ -1,7 +1,7 @@
 package ffprobe
 
-// The target FFprobe tag is stored in ffprobe.version.
-// The versioned XSD is downloaded and cached locally when missing.
+// types.gen.go and ffprobe.schema.json are produced from the FFmpeg tags
+// listed in ffprobe.versions (XSDs cached under xsd/) plus the captured
+// ffprobe output under testdata/probe. See internal/gen for the rules.
 
-//go:generate go run ./cmd/gen-schema ffprobe.schema.json
-//go:generate go-jsonschema -p ffprobe -o types.gen.go ffprobe.schema.json
+//go:generate go run ./internal/gen

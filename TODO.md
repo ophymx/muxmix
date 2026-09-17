@@ -1,33 +1,13 @@
 # TODO
 
-## 1. ffprobe: helper layer over generated types
+## 1. ffprobe: helper layer over generated types (done)
 
-All fields on `StreamType`, `FormatType`, etc. are XSD-generated pointer types (`*string`,
-`*int`, etc.). Every caller ends up writing the same nil-check boilerplate to extract a
-duration, resolution, or frame rate safely.
+Replaced by the lenient value types (`Int`, `Seconds`, `Rat`, `Bool`, `Tags`) and the
+helpers in `ffprobe/helpers.go`. Remaining ffprobe follow-ups:
 
-Add a thin, non-generated helper layer on top of `ffprobe` — typed accessors that hide the
-pointer indirection and supply sensible zero-value defaults:
-
-```go
-// e.g.
-func VideoStream(info *ffprobe.FFprobeType) (*ffprobe.StreamType, error)
-func (s *StreamType) HeightPx() int
-func (s *StreamType) FrameRate() float64
-func (s *StreamType) DurationSecs(fallback *FormatType) float64
-```
-
-Many ffprobe values are stored as rational strings (e.g. `r_frame_rate: "30000/1001"`).
-The helpers should provide a `*big.Rat` accessor alongside the `float64` convenience form so
-callers that need exact arithmetic — muxing, segment boundary calculations — can avoid
-floating-point rounding:
-
-```go
-func (s *StreamType) FrameRateRat() *big.Rat  // returns nil if unparseable
-func ParseRat(s string) (*big.Rat, bool)       // shared "num/den" parser
-```
-
-The generated types stay as-is; the helpers live alongside them in a separate file.
+- Typed accessors for common side data (Display Matrix, Mastering display metadata,
+  Content light level, Skip Samples) instead of reading `SideData.Extra` by key.
+- A `Sections` query (`ffprobe -sections`) so callers can feature-detect a binary at runtime.
 
 ## 2. hwaccel: consolidated arg builder
 

@@ -1,0 +1,9 @@
+{
+    "programs": [
+
+    ],
+    "streams": [
+        { "index": 0, "codec_name": "pcm_s16le", "codec_type": "audio" }
+    ],
+    "format": { "filename": "ffprobe/testdata/media/audio.wav", "duration": "0.500000" }
+}

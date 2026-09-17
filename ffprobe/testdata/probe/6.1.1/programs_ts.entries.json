@@ -1,0 +1,18 @@
+{
+    "programs": [
+        {             "streams": [
+                { "index": 0, "codec_name": "h264", "codec_type": "video" },
+                { "index": 1, "codec_name": "aac", "codec_type": "audio" }
+            ] },
+        {             "streams": [
+                { "index": 0, "codec_name": "h264", "codec_type": "video" },
+                { "index": 2, "codec_name": "aac", "codec_type": "audio" }
+            ] }
+    ],
+    "streams": [
+        { "index": 0, "codec_name": "h264", "codec_type": "video" },
+        { "index": 1, "codec_name": "aac", "codec_type": "audio" },
+        { "index": 2, "codec_name": "aac", "codec_type": "audio" }
+    ],
+    "format": { "filename": "ffprobe/testdata/media/programs.ts", "duration": "1.021333" }
+}

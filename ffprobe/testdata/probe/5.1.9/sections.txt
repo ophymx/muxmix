@@ -1,0 +1,53 @@
+Sections:
+W.. = Section is a wrapper (contains other sections, no local entries)
+.A. = Section contains an array of elements of the same type
+..V = Section may contain a variable number of fields with variable keys
+FLAGS NAME/UNIQUE_NAME
+---
+W..   root
+.A.      chapters
+...          chapter
+..V              tags/chapter_tags
+...      format
+..V          tags/format_tags
+.A.      frames
+...          frame
+..V              tags/frame_tags
+.A.              side_data_list/frame_side_data_list
+...                  side_data/frame_side_data
+.A.                      timecodes
+...                          timecode
+.A.                      components
+...                          component
+.A.                              pieces
+...                                  section
+.A.              logs
+...                  log
+...          subtitle
+.A.      programs
+...          program
+..V              tags/program_tags
+.A.              streams/program_streams
+...                  stream/program_stream
+...                      disposition/program_stream_disposition
+..V                      tags/program_stream_tags
+.A.      streams
+...          stream
+...              disposition/stream_disposition
+..V              tags/stream_tags
+.A.              side_data_list/stream_side_data_list
+...                  side_data/stream_side_data
+.A.      packets
+...          packet
+..V              tags/packet_tags
+.A.              side_data_list/packet_side_data_list
+...                  side_data/packet_side_data
+...      error
+...      program_version
+.A.      library_versions
+...          library_version
+.A.      pixel_formats
+...          pixel_format
+...              flags/pixel_format_flags
+.A.              components/pixel_format_components
+...                  component

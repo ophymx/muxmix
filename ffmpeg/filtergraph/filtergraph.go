@@ -1,18 +1,18 @@
-// Package ffmpeg provides a comprehensive filtergraph implementation for FFmpeg video processing.
+// Package filtergraph builds and validates FFmpeg filtergraph strings.
 //
 // This package offers a type-safe, fluent API for building complex FFmpeg filter graphs
 // with validation, common filter builders, and optimization capabilities.
 //
 // Basic usage:
 //
-// graph := ffmpeg.NewFilterGraph()
+// graph := filtergraph.NewFilterGraph()
 // chain := graph.NewChain()
 // chain.Scale(1920, 1080).FPS(30).Format("yuv420p")
 // fmt.Println(graph.String()) // scale=w=1920:h=1080,fps=fps=30.00,format=yuv420p
 //
 // Advanced usage with multiple chains:
 //
-// graph := ffmpeg.NewFilterGraph()
+// graph := filtergraph.NewFilterGraph()
 //
 // // Video processing chain
 // video := graph.NewChain()

@@ -1,0 +1,13 @@
+{
+    "program_version": { "version": "4.4.2-0ubuntu0.22.04.1", "copyright": "Copyright (c) 2007-2021 the FFmpeg developers", "compiler_ident": "gcc 11 (Ubuntu 11.2.0-19ubuntu1)", "configuration": "--prefix=/usr --extra-version=0ubuntu0.22.04.1 --toolchain=hardened --libdir=/usr/lib/x86_64-linux-gnu --incdir=/usr/include/x86_64-linux-gnu --arch=amd64 --enable-gpl --disable-stripping --enable-gnutls --enable-ladspa --enable-libaom --enable-libass --enable-libbluray --enable-libbs2b --enable-libcaca --enable-libcdio --enable-libcodec2 --enable-libdav1d --enable-libflite --enable-libfontconfig --enable-libfreetype --enable-libfribidi --enable-libgme --enable-libgsm --enable-libjack --enable-libmp3lame --enable-libmysofa --enable-libopenjpeg --enable-libopenmpt --enable-libopus --enable-libpulse --enable-librabbitmq --enable-librubberband --enable-libshine --enable-libsnappy --enable-libsoxr --enable-libspeex --enable-libsrt --enable-libssh --enable-libtheora --enable-libtwolame --enable-libvidstab --enable-libvorbis --enable-libvpx --enable-libwebp --enable-libx265 --enable-libxml2 --enable-libxvid --enable-libzimg --enable-libzmq --enable-libzvbi --enable-lv2 --enable-omx --enable-openal --enable-opencl --enable-opengl --enable-sdl2 --enable-pocketsphinx --enable-librsvg --enable-libmfx --enable-libdc1394 --enable-libdrm --enable-libiec61883 --enable-chromaprint --enable-frei0r --enable-libx264 --enable-shared" },
+    "library_versions": [
+        { "name": "libavutil", "major": 56, "minor": 70, "micro": 100, "version": 3688036, "ident": "Lavu56.70.100" },
+        { "name": "libavcodec", "major": 58, "minor": 134, "micro": 100, "version": 3835492, "ident": "Lavc58.134.100" },
+        { "name": "libavformat", "major": 58, "minor": 76, "micro": 100, "version": 3820644, "ident": "Lavf58.76.100" },
+        { "name": "libavdevice", "major": 58, "minor": 13, "micro": 100, "version": 3804516, "ident": "Lavd58.13.100" },
+        { "name": "libavfilter", "major": 7, "minor": 110, "micro": 100, "version": 487012, "ident": "Lavfi7.110.100" },
+        { "name": "libswscale", "major": 5, "minor": 9, "micro": 100, "version": 330084, "ident": "SwS5.9.100" },
+        { "name": "libswresample", "major": 3, "minor": 9, "micro": 100, "version": 199012, "ident": "SwR3.9.100" },
+        { "name": "libpostproc", "major": 55, "minor": 9, "micro": 100, "version": 3606884, "ident": "postproc55.9.100" }
+    ]
+}

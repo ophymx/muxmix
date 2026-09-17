@@ -22,12 +22,12 @@ package main
 
 import (
     "fmt"
-    "github.com/ophymx/muxmix/ffmpeg"
+    "github.com/ophymx/muxmix/ffmpeg/filtergraph"
 )
 
 func main() {
     // Create a new filtergraph
-    graph := ffmpeg.NewFilterGraph()
+    graph := filtergraph.NewFilterGraph()
     
     // Create a simple processing chain
     chain := graph.NewChain()
@@ -41,7 +41,7 @@ func main() {
 
 ```go
 func complexProcessing() {
-    graph := ffmpeg.NewFilterGraph().WithSwsFlags("lanczos")
+    graph := filtergraph.NewFilterGraph().WithSwsFlags("lanczos")
     
     // Video processing chain
     video := graph.NewChain()
@@ -67,7 +67,7 @@ func complexProcessing() {
 
 ```go
 func videoOverlay() {
-    graph := ffmpeg.NewFilterGraph()
+    graph := filtergraph.NewFilterGraph()
     
     // Main video input
     graph.NewChain().Input("0:v").Output("main")
@@ -93,7 +93,7 @@ The package includes convenient builder methods for frequently used filters:
 ### Video Filters
 
 ```go
-chain := ffmpeg.NewFilterChain()
+chain := filtergraph.NewFilterChain()
 
 // Scale video to specific resolution
 chain.Scale(1920, 1080)
@@ -136,7 +136,7 @@ For filters not covered by convenience methods, use the generic filter builder:
 
 ```go
 // Using key-value arguments
-filter := ffmpeg.NewFilter("convolution").
+filter := filtergraph.NewFilter("convolution").
     WithKVArgs(map[string]string{
         "0m": "1 0 -1",
         "0v": "1 0 -1", 
@@ -145,7 +145,7 @@ filter := ffmpeg.NewFilter("convolution").
     })
 
 // Using positional arguments  
-filter := ffmpeg.NewFilter("format").
+filter := filtergraph.NewFilter("format").
     WithPositionalArgs([]string{"yuv420p", "yuv444p"})
 
 // Add to chain
@@ -157,7 +157,7 @@ chain.Add(filter)
 For complex graphs requiring filter reuse:
 
 ```go
-filter := ffmpeg.NewFilter("scale").
+filter := filtergraph.NewFilter("scale").
     WithInstance("main_scaler").
     WithKVArgs(map[string]string{"w": "1920", "h": "1080"})
 
@@ -169,7 +169,7 @@ filter := ffmpeg.NewFilter("scale").
 The package provides comprehensive validation:
 
 ```go
-graph := ffmpeg.NewFilterGraph()
+graph := filtergraph.NewFilterGraph()
 chain := graph.NewChain()
 chain.Scale(1920, 1080).FPS(30.0)
 
@@ -190,7 +190,7 @@ Validation checks include:
 Full support for JSON marshaling/unmarshaling:
 
 ```go
-graph := ffmpeg.NewFilterGraph()
+graph := filtergraph.NewFilterGraph()
 chain := graph.NewChain()
 chain.Scale(1920, 1080).FPS(30.0)
 
@@ -201,7 +201,7 @@ if err != nil {
 }
 
 // Deserialize from JSON
-var newGraph ffmpeg.FilterGraph
+var newGraph filtergraph.FilterGraph
 err = json.Unmarshal(data, &newGraph)
 if err != nil {
     log.Fatal(err)
@@ -213,7 +213,7 @@ if err != nil {
 Mathematical expressions are supported in filter parameters:
 
 ```go
-chain := ffmpeg.NewFilterChain()
+chain := filtergraph.NewFilterChain()
 
 // Scale to half the input size
 chain.ScaleExpression("iw/2", "ih/2")
@@ -255,7 +255,7 @@ ffmpeg -i input.mp4 -filter_complex "scale=w=1920:h=1080,fps=fps=30.00" output.m
 Or programmatically:
 
 ```go
-graph := ffmpeg.NewFilterGraph()
+graph := filtergraph.NewFilterGraph()
 // ... build graph ...
 
 cmd := exec.Command("ffmpeg", 

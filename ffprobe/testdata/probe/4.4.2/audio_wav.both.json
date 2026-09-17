@@ -1,0 +1,8 @@
+{
+    "packets_and_frames": [
+        { "type": "packet", "codec_type": "audio", "stream_index": 0, "pts": 0, "pts_time": "0.000000", "dts": 0, "dts_time": "0.000000", "duration": 2048, "duration_time": "0.256000", "size": "4096", "pos": "78", "flags": "K_" },
+        { "type": "frame", "media_type": "audio", "stream_index": 0, "key_frame": 1, "pkt_pts": 0, "pkt_pts_time": "0.000000", "pkt_dts": 0, "pkt_dts_time": "0.000000", "best_effort_timestamp": 0, "best_effort_timestamp_time": "0.000000", "pkt_duration": 2048, "pkt_duration_time": "0.256000", "pkt_pos": "78", "pkt_size": "4096", "sample_fmt": "s16", "nb_samples": 2048, "channels": 1 },
+        { "type": "packet", "codec_type": "audio", "stream_index": 0, "pts": 2048, "pts_time": "0.256000", "dts": 2048, "dts_time": "0.256000", "duration": 1952, "duration_time": "0.244000", "size": "3904", "pos": "4174", "flags": "K_" },
+        { "type": "frame", "media_type": "audio", "stream_index": 0, "key_frame": 1, "pkt_pts": 2048, "pkt_pts_time": "0.256000", "pkt_dts": 2048, "pkt_dts_time": "0.256000", "best_effort_timestamp": 2048, "best_effort_timestamp_time": "0.256000", "pkt_duration": 1952, "pkt_duration_time": "0.244000", "pkt_pos": "4174", "pkt_size": "3904", "sample_fmt": "s16", "nb_samples": 1952, "channels": 1 }
+    ]
+}

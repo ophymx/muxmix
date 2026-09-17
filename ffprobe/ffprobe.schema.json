@@ -1,173 +1,189 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$ref": "#/$defs/ffprobeType",
+  "$ref": "#/$defs/Result",
   "$defs": {
-    "StreamGroupsType": {
-      "type": "object",
-      "properties": {
-        "stream_group": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/streamGroupType"
-          }
-        }
-      }
-    },
-    "chapterType": {
+    "Chapter": {
       "type": "object",
       "properties": {
         "end": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "string"
+          ]
         },
         "end_time": {
-          "type": "number"
+          "type": [
+            "number",
+            "string"
+          ]
         },
         "id": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "string"
+          ]
         },
         "start": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "string"
+          ]
         },
         "start_time": {
-          "type": "number"
+          "type": [
+            "number",
+            "string"
+          ]
         },
         "tags": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/tagsType"
-          }
+          "$ref": "#/$defs/Tags"
         },
         "time_base": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "id",
-        "time_base",
-        "start",
-        "end",
-        "end_time"
-      ]
-    },
-    "chaptersType": {
-      "type": "object",
-      "properties": {
-        "chapter": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/chapterType"
-          }
+          "type": "string",
+          "pattern": "^(-?[0-9]+[/:]-?[0-9]+|N/A)$"
         }
       }
     },
-    "errorType": {
+    "Disposition": {
       "type": "object",
       "properties": {
-        "code": {
-          "type": "integer"
+        "attached_pic": {
+          "type": [
+            "integer",
+            "boolean"
+          ]
         },
-        "string": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "code",
-        "string"
-      ]
-    },
-    "ffprobeType": {
-      "type": "object",
-      "properties": {
-        "chapters": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/chapterType"
-          }
+        "captions": {
+          "type": [
+            "integer",
+            "boolean"
+          ],
+          "description": "Added in FFmpeg 5.1."
         },
-        "error": {
-          "$ref": "#/$defs/errorType"
+        "clean_effects": {
+          "type": [
+            "integer",
+            "boolean"
+          ]
         },
-        "format": {
-          "$ref": "#/$defs/formatType"
+        "comment": {
+          "type": [
+            "integer",
+            "boolean"
+          ]
         },
-        "frames": {
-          "type": "array",
-          "items": {
-            "anyOf": [
-              {
-                "$ref": "#/$defs/frameType"
-              },
-              {
-                "$ref": "#/$defs/subtitleType"
-              }
-            ]
-          }
+        "default": {
+          "type": [
+            "integer",
+            "boolean"
+          ]
         },
-        "library_versions": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/libraryVersionType"
-          }
+        "dependent": {
+          "type": [
+            "integer",
+            "boolean"
+          ],
+          "description": "Added in FFmpeg 5.1."
         },
-        "packets": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/packetType"
-          }
+        "descriptions": {
+          "type": [
+            "integer",
+            "boolean"
+          ],
+          "description": "Added in FFmpeg 5.1."
         },
-        "packets_and_frames": {
-          "type": "array",
-          "items": {
-            "anyOf": [
-              {
-                "$ref": "#/$defs/packetType"
-              },
-              {
-                "$ref": "#/$defs/frameType"
-              },
-              {
-                "$ref": "#/$defs/subtitleType"
-              }
-            ]
-          }
+        "dub": {
+          "type": [
+            "integer",
+            "boolean"
+          ]
         },
-        "pixel_formats": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/pixelFormatType"
-          }
+        "forced": {
+          "type": [
+            "integer",
+            "boolean"
+          ]
         },
-        "program_version": {
-          "$ref": "#/$defs/programVersionType"
+        "hearing_impaired": {
+          "type": [
+            "integer",
+            "boolean"
+          ]
         },
-        "programs": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/programType"
-          }
+        "karaoke": {
+          "type": [
+            "integer",
+            "boolean"
+          ]
         },
-        "stream_groups": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/streamGroupType"
-          }
+        "lyrics": {
+          "type": [
+            "integer",
+            "boolean"
+          ]
         },
-        "streams": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/streamType"
-          }
+        "metadata": {
+          "type": [
+            "integer",
+            "boolean"
+          ],
+          "description": "Added in FFmpeg 5.1."
+        },
+        "multilayer": {
+          "type": [
+            "integer",
+            "boolean"
+          ],
+          "description": "Added in FFmpeg 7.1."
+        },
+        "non_diegetic": {
+          "type": [
+            "integer",
+            "boolean"
+          ],
+          "description": "Added in FFmpeg 6.1."
+        },
+        "original": {
+          "type": [
+            "integer",
+            "boolean"
+          ]
+        },
+        "still_image": {
+          "type": [
+            "integer",
+            "boolean"
+          ],
+          "description": "Added in FFmpeg 5.1."
+        },
+        "timed_thumbnails": {
+          "type": [
+            "integer",
+            "boolean"
+          ]
+        },
+        "visual_impaired": {
+          "type": [
+            "integer",
+            "boolean"
+          ]
         }
       }
     },
-    "formatType": {
+    "Format": {
       "type": "object",
       "properties": {
         "bit_rate": {
-          "type": "string"
+          "type": [
+            "integer",
+            "string"
+          ]
         },
         "duration": {
-          "type": "string"
+          "type": [
+            "number",
+            "string"
+          ]
         },
         "filename": {
           "type": "string"
@@ -179,170 +195,79 @@
           "type": "string"
         },
         "nb_programs": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "string"
+          ]
         },
         "nb_stream_groups": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "string"
+          ],
+          "description": "Added in FFmpeg 7.0."
         },
         "nb_streams": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "string"
+          ]
         },
         "probe_score": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "string"
+          ]
         },
         "size": {
-          "type": "string"
+          "type": [
+            "integer",
+            "string"
+          ]
         },
         "start_time": {
-          "type": "string"
+          "type": [
+            "number",
+            "string"
+          ]
         },
         "tags": {
-          "$ref": "#/$defs/tagsType"
-        }
-      },
-      "required": [
-        "filename",
-        "nb_streams",
-        "nb_programs",
-        "nb_stream_groups",
-        "format_name"
-      ]
-    },
-    "frameSideDataComponentList": {
-      "type": "object",
-      "properties": {
-        "component": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/frameSideDataComponentType"
-          }
+          "$ref": "#/$defs/Tags"
         }
       }
     },
-    "frameSideDataComponentType": {
-      "type": "object",
-      "properties": {
-        "pieces": {
-          "$ref": "#/$defs/frameSideDataPieceList"
-        },
-        "side_datum": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/frameSideDatumType"
-          }
-        }
-      }
-    },
-    "frameSideDataListType": {
-      "type": "object",
-      "properties": {
-        "side_data": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/frameSideDataType"
-          },
-          "minItems": 1
-        }
-      },
-      "required": [
-        "side_data"
-      ]
-    },
-    "frameSideDataPieceList": {
-      "type": "object",
-      "properties": {
-        "piece": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/frameSideDataPieceType"
-          }
-        }
-      }
-    },
-    "frameSideDataPieceType": {
-      "type": "object",
-      "properties": {
-        "side_datum": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/frameSideDatumType"
-          }
-        }
-      }
-    },
-    "frameSideDataTimecodeList": {
-      "type": "object",
-      "properties": {
-        "timecode": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/frameSideDataTimecodeType"
-          }
-        }
-      }
-    },
-    "frameSideDataTimecodeType": {
-      "type": "object",
-      "properties": {
-        "value": {
-          "type": "string"
-        }
-      }
-    },
-    "frameSideDataType": {
-      "type": "object",
-      "properties": {
-        "components": {
-          "$ref": "#/$defs/frameSideDataComponentList"
-        },
-        "side_data_size": {
-          "type": "integer"
-        },
-        "side_data_type": {
-          "type": "string"
-        },
-        "side_datum": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/frameSideDatumType"
-          }
-        },
-        "timecode": {
-          "type": "string"
-        },
-        "timecodes": {
-          "$ref": "#/$defs/frameSideDataTimecodeList"
-        }
-      }
-    },
-    "frameSideDatumType": {
-      "type": "object",
-      "properties": {
-        "key": {
-          "type": "string"
-        },
-        "value": {
-          "type": "string"
-        }
-      }
-    },
-    "frameType": {
+    "Frame": {
       "type": "object",
       "properties": {
         "best_effort_timestamp": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "string"
+          ]
         },
         "best_effort_timestamp_time": {
-          "type": "number"
+          "type": [
+            "number",
+            "string"
+          ]
         },
         "channel_layout": {
           "type": "string"
         },
         "channels": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "string"
+          ]
         },
         "chroma_location": {
           "type": "string"
+        },
+        "coded_picture_number": {
+          "type": [
+            "integer",
+            "string"
+          ]
         },
         "color_primaries": {
           "type": "string"
@@ -357,40 +282,113 @@
           "type": "string"
         },
         "crop_bottom": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "string"
+          ],
+          "description": "Added in FFmpeg 6.1."
         },
         "crop_left": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "string"
+          ],
+          "description": "Added in FFmpeg 6.1."
         },
         "crop_right": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "string"
+          ],
+          "description": "Added in FFmpeg 6.1."
         },
         "crop_top": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "string"
+          ],
+          "description": "Added in FFmpeg 6.1."
+        },
+        "display_picture_number": {
+          "type": [
+            "integer",
+            "string"
+          ]
         },
         "duration": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "string"
+          ],
+          "description": "Added in FFmpeg 6.0."
         },
         "duration_time": {
-          "type": "number"
+          "type": [
+            "number",
+            "string"
+          ],
+          "description": "Added in FFmpeg 6.0."
+        },
+        "end_display_time": {
+          "type": [
+            "integer",
+            "string"
+          ],
+          "description": "Subtitle frames only."
+        },
+        "format": {
+          "type": [
+            "integer",
+            "string"
+          ],
+          "description": "Subtitle frames only."
         },
         "height": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "string"
+          ]
         },
         "interlaced_frame": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "boolean"
+          ]
         },
         "key_frame": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "boolean"
+          ]
         },
         "logs": {
-          "$ref": "#/$defs/logsType"
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Log"
+          }
+        },
+        "lossless": {
+          "type": [
+            "integer",
+            "boolean"
+          ],
+          "description": "Added in FFmpeg 8.0."
         },
         "media_type": {
           "type": "string"
         },
         "nb_samples": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "num_rects": {
+          "type": [
+            "integer",
+            "string"
+          ],
+          "description": "Subtitle frames only."
         },
         "pict_type": {
           "type": "string"
@@ -399,195 +397,239 @@
           "type": "string"
         },
         "pkt_dts": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "string"
+          ]
         },
         "pkt_dts_time": {
-          "type": "number"
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "pkt_duration": {
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "pkt_duration_time": {
+          "type": [
+            "number",
+            "string"
+          ]
         },
         "pkt_pos": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "pkt_pts": {
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "pkt_pts_time": {
+          "type": [
+            "number",
+            "string"
+          ]
         },
         "pkt_size": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "string"
+          ]
         },
         "pts": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "string"
+          ]
         },
         "pts_time": {
-          "type": "number"
+          "type": [
+            "number",
+            "string"
+          ]
         },
         "repeat_pict": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "string"
+          ]
         },
         "sample_aspect_ratio": {
-          "type": "string"
+          "type": "string",
+          "pattern": "^(-?[0-9]+[/:]-?[0-9]+|N/A)$"
         },
         "sample_fmt": {
           "type": "string"
         },
         "side_data_list": {
-          "$ref": "#/$defs/frameSideDataListType"
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FrameSideData"
+          }
+        },
+        "start_display_time": {
+          "type": [
+            "integer",
+            "string"
+          ],
+          "description": "Subtitle frames only."
         },
         "stream_index": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "string"
+          ]
         },
         "tags": {
-          "$ref": "#/$defs/tagsType"
+          "$ref": "#/$defs/Tags"
         },
         "top_field_first": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "boolean"
+          ]
         },
         "width": {
-          "type": "integer"
-        }
-      },
-      "required": [
-        "media_type",
-        "key_frame"
-      ]
-    },
-    "framesType": {
-      "type": "object",
-      "properties": {
-        "frame": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/frameType"
-          }
-        },
-        "subtitle": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/subtitleType"
-          }
+          "type": [
+            "integer",
+            "string"
+          ]
         }
       }
     },
-    "libraryVersionType": {
+    "FrameSideData": {
+      "type": "object",
+      "properties": {
+        "components": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FrameSideDataComponent"
+          },
+          "description": "Added in FFmpeg 7.0."
+        },
+        "side_data_size": {
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "side_data_type": {
+          "type": "string"
+        },
+        "timecode": {
+          "type": "string"
+        },
+        "timecodes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FrameSideDataTimecode"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "FrameSideDataComponent": {
+      "type": "object",
+      "properties": {
+        "pieces": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FrameSideDataPiece"
+          },
+          "description": "Added in FFmpeg 7.0."
+        }
+      },
+      "additionalProperties": true
+    },
+    "FrameSideDataPiece": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": true
+    },
+    "FrameSideDataTimecode": {
+      "type": "object",
+      "properties": {
+        "value": {
+          "type": "string"
+        }
+      }
+    },
+    "LibraryVersion": {
       "type": "object",
       "properties": {
         "ident": {
           "type": "string"
         },
         "major": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "string"
+          ]
         },
         "micro": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "string"
+          ]
         },
         "minor": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "string"
+          ]
         },
         "name": {
           "type": "string"
         },
         "version": {
-          "type": "integer"
-        }
-      },
-      "required": [
-        "name",
-        "major",
-        "minor",
-        "micro",
-        "version",
-        "ident"
-      ]
-    },
-    "libraryVersionsType": {
-      "type": "object",
-      "properties": {
-        "library_version": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/libraryVersionType"
-          }
+          "type": [
+            "integer",
+            "string"
+          ]
         }
       }
     },
-    "logType": {
+    "Log": {
       "type": "object",
       "properties": {
         "category": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "string"
+          ]
         },
         "context": {
           "type": "string"
         },
         "level": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "string"
+          ]
         },
         "message": {
           "type": "string"
         },
         "parent_category": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "string"
+          ]
         },
         "parent_context": {
           "type": "string"
         }
       }
     },
-    "logsType": {
-      "type": "object",
-      "properties": {
-        "log": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/logType"
-          },
-          "minItems": 1
-        }
-      },
-      "required": [
-        "log"
-      ]
-    },
-    "packetSideDataListType": {
-      "type": "object",
-      "properties": {
-        "side_data": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/packetSideDataType"
-          },
-          "minItems": 1
-        }
-      },
-      "required": [
-        "side_data"
-      ]
-    },
-    "packetSideDataType": {
-      "type": "object",
-      "properties": {
-        "side_datum": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/packetSideDatumType"
-          },
-          "minItems": 1
-        },
-        "type": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "side_datum"
-      ]
-    },
-    "packetSideDatumType": {
-      "type": "object",
-      "properties": {
-        "key": {
-          "type": "string"
-        },
-        "value": {
-          "type": "string"
-        }
-      }
-    },
-    "packetType": {
+    "Packet": {
       "type": "object",
       "properties": {
         "codec_type": {
@@ -600,219 +642,301 @@
           "type": "string"
         },
         "dts": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "string"
+          ]
         },
         "dts_time": {
-          "type": "string"
+          "type": [
+            "number",
+            "string"
+          ]
         },
         "duration": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "string"
+          ]
         },
         "duration_time": {
-          "type": "string"
+          "type": [
+            "number",
+            "string"
+          ]
         },
         "flags": {
           "type": "string"
         },
         "pos": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "string"
+          ]
         },
         "pts": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "string"
+          ]
         },
         "pts_time": {
-          "type": "string"
+          "type": [
+            "number",
+            "string"
+          ]
         },
         "side_data_list": {
-          "$ref": "#/$defs/packetSideDataListType"
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SideData"
+          }
         },
         "size": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "string"
+          ]
         },
         "stream_index": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "string"
+          ]
         },
         "tags": {
-          "$ref": "#/$defs/tagsType"
-        }
-      },
-      "required": [
-        "codec_type",
-        "stream_index",
-        "size",
-        "flags"
-      ]
-    },
-    "packetsAndFramesType": {
-      "type": "object",
-      "properties": {
-        "frame": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/frameType"
-          }
-        },
-        "packet": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/packetType"
-          }
-        },
-        "subtitle": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/subtitleType"
-          }
+          "$ref": "#/$defs/Tags"
         }
       }
     },
-    "packetsType": {
-      "type": "object",
-      "properties": {
-        "packet": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/packetType"
-          }
-        }
-      }
-    },
-    "pixelFormatComponentType": {
-      "type": "object",
-      "properties": {
-        "bit_depth": {
-          "type": "integer"
+    "PacketOrFrame": {
+      "oneOf": [
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Packet"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "enum": [
+                    "packet"
+                  ]
+                }
+              }
+            }
+          ]
         },
-        "index": {
-          "type": "integer"
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Frame"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "enum": [
+                    "frame",
+                    "subtitle"
+                  ]
+                }
+              }
+            }
+          ]
         }
-      },
-      "required": [
-        "index",
-        "bit_depth"
       ]
     },
-    "pixelFormatComponentsType": {
-      "type": "object",
-      "properties": {
-        "component": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/pixelFormatComponentType"
-          }
-        }
-      }
-    },
-    "pixelFormatFlagsType": {
-      "type": "object",
-      "properties": {
-        "alpha": {
-          "type": "integer"
-        },
-        "big_endian": {
-          "type": "integer"
-        },
-        "bitstream": {
-          "type": "integer"
-        },
-        "hwaccel": {
-          "type": "integer"
-        },
-        "palette": {
-          "type": "integer"
-        },
-        "planar": {
-          "type": "integer"
-        },
-        "rgb": {
-          "type": "integer"
-        }
-      },
-      "required": [
-        "big_endian",
-        "palette",
-        "bitstream",
-        "hwaccel",
-        "planar",
-        "rgb",
-        "alpha"
-      ]
-    },
-    "pixelFormatType": {
+    "PixelFormat": {
       "type": "object",
       "properties": {
         "bits_per_pixel": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "string"
+          ]
         },
         "components": {
-          "$ref": "#/$defs/pixelFormatComponentsType"
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PixelFormatComponent"
+          }
         },
         "flags": {
-          "$ref": "#/$defs/pixelFormatFlagsType"
+          "$ref": "#/$defs/PixelFormatFlags"
         },
         "log2_chroma_h": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "string"
+          ]
         },
         "log2_chroma_w": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "string"
+          ]
         },
         "name": {
           "type": "string"
         },
         "nb_components": {
-          "type": "integer"
-        }
-      },
-      "required": [
-        "name",
-        "nb_components"
-      ]
-    },
-    "pixelFormatsType": {
-      "type": "object",
-      "properties": {
-        "pixel_format": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/pixelFormatType"
-          }
+          "type": [
+            "integer",
+            "string"
+          ]
         }
       }
     },
-    "programType": {
+    "PixelFormatComponent": {
       "type": "object",
       "properties": {
-        "nb_streams": {
-          "type": "integer"
+        "bit_depth": {
+          "type": [
+            "integer",
+            "string"
+          ]
         },
-        "pcr_pid": {
-          "type": "integer"
-        },
-        "pmt_pid": {
-          "type": "integer"
-        },
-        "program_id": {
-          "type": "integer"
-        },
-        "program_num": {
-          "type": "integer"
-        },
-        "streams": {
-          "$ref": "#/$defs/streamsType"
-        },
-        "tags": {
-          "$ref": "#/$defs/tagsType"
+        "index": {
+          "type": [
+            "integer",
+            "string"
+          ]
         }
       },
-      "required": [
-        "program_id",
-        "program_num",
-        "nb_streams",
-        "pmt_pid",
-        "pcr_pid"
-      ]
+      "additionalProperties": true
     },
-    "programVersionType": {
+    "PixelFormatFlags": {
+      "type": "object",
+      "properties": {
+        "alpha": {
+          "type": [
+            "integer",
+            "boolean"
+          ]
+        },
+        "big_endian": {
+          "type": [
+            "integer",
+            "boolean"
+          ]
+        },
+        "bitstream": {
+          "type": [
+            "integer",
+            "boolean"
+          ]
+        },
+        "hwaccel": {
+          "type": [
+            "integer",
+            "boolean"
+          ]
+        },
+        "palette": {
+          "type": [
+            "integer",
+            "boolean"
+          ]
+        },
+        "planar": {
+          "type": [
+            "integer",
+            "boolean"
+          ]
+        },
+        "rgb": {
+          "type": [
+            "integer",
+            "boolean"
+          ]
+        }
+      }
+    },
+    "ProbeError": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "string": {
+          "type": "string"
+        }
+      }
+    },
+    "Program": {
+      "type": "object",
+      "properties": {
+        "end_pts": {
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "end_time": {
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "nb_streams": {
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "pcr_pid": {
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "pmt_pid": {
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "program_id": {
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "program_num": {
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "start_pts": {
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "start_time": {
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "streams": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Stream"
+          }
+        },
+        "tags": {
+          "$ref": "#/$defs/Tags"
+        }
+      }
+    },
+    "ProgramVersion": {
       "type": "object",
       "properties": {
         "build_date": {
@@ -833,298 +957,135 @@
         "version": {
           "type": "string"
         }
-      },
-      "required": [
-        "version",
-        "copyright",
-        "compiler_ident",
-        "configuration"
-      ]
+      }
     },
-    "programsType": {
+    "Result": {
       "type": "object",
       "properties": {
-        "program": {
+        "chapters": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/programType"
+            "$ref": "#/$defs/Chapter"
           }
-        }
-      }
-    },
-    "streamDispositionType": {
-      "type": "object",
-      "properties": {
-        "attached_pic": {
-          "type": "integer"
         },
-        "captions": {
-          "type": "integer"
+        "error": {
+          "$ref": "#/$defs/ProbeError"
         },
-        "clean_effects": {
-          "type": "integer"
+        "format": {
+          "$ref": "#/$defs/Format"
         },
-        "comment": {
-          "type": "integer"
-        },
-        "default": {
-          "type": "integer"
-        },
-        "dependent": {
-          "type": "integer"
-        },
-        "descriptions": {
-          "type": "integer"
-        },
-        "dub": {
-          "type": "integer"
-        },
-        "forced": {
-          "type": "integer"
-        },
-        "hearing_impaired": {
-          "type": "integer"
-        },
-        "karaoke": {
-          "type": "integer"
-        },
-        "lyrics": {
-          "type": "integer"
-        },
-        "metadata": {
-          "type": "integer"
-        },
-        "multilayer": {
-          "type": "integer"
-        },
-        "non_diegetic": {
-          "type": "integer"
-        },
-        "original": {
-          "type": "integer"
-        },
-        "still_image": {
-          "type": "integer"
-        },
-        "timed_thumbnails": {
-          "type": "integer"
-        },
-        "visual_impaired": {
-          "type": "integer"
-        }
-      },
-      "required": [
-        "default",
-        "dub",
-        "original",
-        "comment",
-        "lyrics",
-        "karaoke",
-        "forced",
-        "hearing_impaired",
-        "visual_impaired",
-        "clean_effects",
-        "attached_pic",
-        "timed_thumbnails",
-        "non_diegetic",
-        "captions",
-        "descriptions",
-        "metadata",
-        "dependent",
-        "still_image",
-        "multilayer"
-      ]
-    },
-    "streamGroupBlockList": {
-      "type": "object",
-      "properties": {
-        "block": {
+        "frames": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/streamGroupBlockType"
-          }
-        }
-      }
-    },
-    "streamGroupBlockType": {
-      "type": "object",
-      "properties": {
-        "block_entry": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/streamGroupEntryType"
-          }
-        }
-      }
-    },
-    "streamGroupComponentList": {
-      "type": "object",
-      "properties": {
-        "component": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/streamGroupComponentType"
-          }
-        }
-      }
-    },
-    "streamGroupComponentType": {
-      "type": "object",
-      "properties": {
-        "component_entry": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/streamGroupEntryType"
+            "$ref": "#/$defs/Frame"
           }
         },
-        "subcomponents": {
-          "$ref": "#/$defs/streamGroupSubComponentList"
-        }
-      }
-    },
-    "streamGroupEntryType": {
-      "type": "object",
-      "properties": {
-        "key": {
-          "type": "string"
-        },
-        "value": {
-          "type": "string"
-        }
-      }
-    },
-    "streamGroupPieceList": {
-      "type": "object",
-      "properties": {
-        "piece": {
+        "library_versions": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/streamGroupPieceType"
+            "$ref": "#/$defs/LibraryVersion"
           }
-        }
-      }
-    },
-    "streamGroupPieceType": {
-      "type": "object",
-      "properties": {
-        "piece_entry": {
+        },
+        "packets": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/streamGroupEntryType"
+            "$ref": "#/$defs/Packet"
           }
         },
-        "subpieces": {
-          "$ref": "#/$defs/streamGroupSubPieceList"
-        }
-      }
-    },
-    "streamGroupSubComponentList": {
-      "type": "object",
-      "properties": {
-        "subcomponent": {
+        "packets_and_frames": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/streamGroupSubComponentType"
+            "$ref": "#/$defs/PacketOrFrame"
           }
-        }
-      }
-    },
-    "streamGroupSubComponentType": {
-      "type": "object",
-      "properties": {
-        "pieces": {
-          "$ref": "#/$defs/streamGroupPieceList"
         },
-        "subcomponent_entry": {
+        "pixel_formats": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/streamGroupEntryType"
+            "$ref": "#/$defs/PixelFormat"
           }
-        }
-      }
-    },
-    "streamGroupSubPieceList": {
-      "type": "object",
-      "properties": {
-        "subpiece": {
+        },
+        "program_version": {
+          "$ref": "#/$defs/ProgramVersion"
+        },
+        "programs": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/streamGroupSubPieceType"
+            "$ref": "#/$defs/Program"
           }
-        }
-      }
-    },
-    "streamGroupSubPieceType": {
-      "type": "object",
-      "properties": {
-        "blocks": {
-          "$ref": "#/$defs/streamGroupBlockList"
         },
-        "subpiece_entry": {
+        "stream_groups": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/streamGroupEntryType"
-          }
-        }
-      }
-    },
-    "streamGroupType": {
-      "type": "object",
-      "properties": {
-        "components": {
-          "$ref": "#/$defs/streamGroupComponentList"
-        },
-        "disposition": {
-          "$ref": "#/$defs/streamDispositionType"
-        },
-        "index": {
-          "type": "integer"
-        },
-        "nb_streams": {
-          "type": "integer"
+            "$ref": "#/$defs/StreamGroup"
+          },
+          "description": "Added in FFmpeg 7.0."
         },
         "streams": {
-          "$ref": "#/$defs/streamsType"
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Stream"
+          }
+        }
+      }
+    },
+    "SideData": {
+      "type": "object",
+      "properties": {
+        "side_data_size": {
+          "type": [
+            "integer",
+            "string"
+          ],
+          "description": "Removed after FFmpeg 6.0."
         },
-        "tags": {
-          "$ref": "#/$defs/tagsType"
-        },
-        "type": {
+        "side_data_type": {
           "type": "string"
         }
       },
-      "required": [
-        "index",
-        "nb_streams",
-        "type"
-      ]
+      "additionalProperties": true
     },
-    "streamType": {
+    "Stream": {
       "type": "object",
       "properties": {
         "avg_frame_rate": {
-          "type": "string"
+          "type": "string",
+          "pattern": "^(-?[0-9]+[/:]-?[0-9]+|N/A)$"
         },
         "bit_rate": {
-          "type": "string"
+          "type": [
+            "integer",
+            "string"
+          ]
         },
         "bits_per_raw_sample": {
-          "type": "string"
+          "type": [
+            "integer",
+            "string"
+          ]
         },
         "bits_per_sample": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "string"
+          ]
         },
         "channel_layout": {
           "type": "string"
         },
         "channels": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "string"
+          ]
         },
         "chroma_location": {
           "type": "string"
         },
         "closed_captions": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "boolean"
+          ]
         },
         "codec_long_name": {
           "type": "string"
@@ -1142,10 +1103,16 @@
           "type": "string"
         },
         "coded_height": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "string"
+          ]
         },
         "coded_width": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "string"
+          ]
         },
         "color_primaries": {
           "type": "string"
@@ -1160,16 +1127,23 @@
           "type": "string"
         },
         "display_aspect_ratio": {
-          "type": "string"
+          "type": "string",
+          "pattern": "^(-?[0-9]+[/:]-?[0-9]+|N/A)$"
         },
         "disposition": {
-          "$ref": "#/$defs/streamDispositionType"
+          "$ref": "#/$defs/Disposition"
         },
         "duration": {
-          "type": "string"
+          "type": [
+            "number",
+            "string"
+          ]
         },
         "duration_ts": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "string"
+          ]
         },
         "extradata": {
           "type": "string"
@@ -1178,43 +1152,97 @@
           "type": "string"
         },
         "extradata_size": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "string"
+          ],
+          "description": "Added in FFmpeg 5.1."
         },
         "field_order": {
           "type": "string"
         },
         "film_grain": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "boolean"
+          ],
+          "description": "Added in FFmpeg 5.1."
         },
         "has_b_frames": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "string"
+          ]
         },
         "height": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "string"
+          ]
         },
         "id": {
           "type": "string"
         },
         "index": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "string"
+          ]
         },
         "initial_padding": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "string"
+          ],
+          "description": "Added in FFmpeg 6.0."
+        },
+        "is_avc": {
+          "type": [
+            "integer",
+            "boolean"
+          ],
+          "description": "Not listed in the XSD; observed in JSON output. Added in FFmpeg 4.4."
         },
         "level": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "string"
+          ]
         },
         "max_bit_rate": {
-          "type": "string"
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "mime_codec_string": {
+          "type": "string",
+          "description": "Added in FFmpeg 8.1."
+        },
+        "nal_length_size": {
+          "type": [
+            "integer",
+            "string"
+          ],
+          "description": "Not listed in the XSD; observed in JSON output. Added in FFmpeg 4.4."
         },
         "nb_frames": {
-          "type": "string"
+          "type": [
+            "integer",
+            "string"
+          ]
         },
         "nb_read_frames": {
-          "type": "string"
+          "type": [
+            "integer",
+            "string"
+          ]
         },
         "nb_read_packets": {
-          "type": "string"
+          "type": [
+            "integer",
+            "string"
+          ]
         },
         "pix_fmt": {
           "type": "string"
@@ -1223,108 +1251,195 @@
           "type": "string"
         },
         "r_frame_rate": {
-          "type": "string"
+          "type": "string",
+          "pattern": "^(-?[0-9]+[/:]-?[0-9]+|N/A)$"
         },
         "refs": {
-          "type": "integer"
+          "type": [
+            "integer",
+            "string"
+          ]
         },
         "sample_aspect_ratio": {
-          "type": "string"
+          "type": "string",
+          "pattern": "^(-?[0-9]+[/:]-?[0-9]+|N/A)$"
         },
         "sample_fmt": {
           "type": "string"
         },
         "sample_rate": {
-          "type": "string"
+          "type": [
+            "integer",
+            "string"
+          ]
         },
         "side_data_list": {
-          "$ref": "#/$defs/packetSideDataListType"
-        },
-        "start_pts": {
-          "type": "integer"
-        },
-        "start_time": {
-          "type": "string"
-        },
-        "tags": {
-          "$ref": "#/$defs/tagsType"
-        },
-        "time_base": {
-          "type": "string"
-        },
-        "width": {
-          "type": "integer"
-        }
-      },
-      "required": [
-        "index",
-        "codec_tag",
-        "codec_tag_string",
-        "r_frame_rate",
-        "avg_frame_rate",
-        "time_base"
-      ]
-    },
-    "streamsType": {
-      "type": "object",
-      "properties": {
-        "stream": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/streamType"
+            "$ref": "#/$defs/SideData"
           }
+        },
+        "start_pts": {
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "start_time": {
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "tags": {
+          "$ref": "#/$defs/Tags"
+        },
+        "time_base": {
+          "type": "string",
+          "pattern": "^(-?[0-9]+[/:]-?[0-9]+|N/A)$"
+        },
+        "ts_id": {
+          "type": [
+            "integer",
+            "string"
+          ],
+          "description": "Not listed in the XSD; observed in JSON output. Added in FFmpeg 7.1."
+        },
+        "ts_packetsize": {
+          "type": [
+            "integer",
+            "string"
+          ],
+          "description": "Not listed in the XSD; observed in JSON output. Added in FFmpeg 6.1."
+        },
+        "view_ids_available": {
+          "type": "string",
+          "description": "Not listed in the XSD; observed in JSON output. Added in FFmpeg 7.1."
+        },
+        "view_pos_available": {
+          "type": "string",
+          "description": "Not listed in the XSD; observed in JSON output. Added in FFmpeg 7.1."
+        },
+        "width": {
+          "type": [
+            "integer",
+            "string"
+          ]
         }
       }
     },
-    "subtitleType": {
+    "StreamGroup": {
       "type": "object",
       "properties": {
-        "end_display_time": {
-          "type": "integer"
+        "components": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StreamGroupComponent"
+          },
+          "description": "Added in FFmpeg 7.0."
         },
-        "format": {
-          "type": "integer"
+        "disposition": {
+          "$ref": "#/$defs/Disposition",
+          "description": "Added in FFmpeg 7.0."
         },
-        "media_type": {
-          "type": "string"
+        "id": {
+          "type": "string",
+          "description": "Not listed in the XSD; observed in JSON output. Added in FFmpeg 7.0."
         },
-        "num_rects": {
-          "type": "integer"
+        "index": {
+          "type": [
+            "integer",
+            "string"
+          ],
+          "description": "Added in FFmpeg 7.0."
         },
-        "pts": {
-          "type": "integer"
+        "nb_streams": {
+          "type": [
+            "integer",
+            "string"
+          ],
+          "description": "Added in FFmpeg 7.0."
         },
-        "pts_time": {
-          "type": "number"
+        "streams": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Stream"
+          },
+          "description": "Added in FFmpeg 7.0."
         },
-        "start_display_time": {
-          "type": "integer"
+        "tags": {
+          "$ref": "#/$defs/Tags",
+          "description": "Added in FFmpeg 7.0."
+        },
+        "type": {
+          "type": "string",
+          "description": "Added in FFmpeg 7.0."
         }
-      },
-      "required": [
-        "media_type"
-      ]
+      }
     },
-    "tagType": {
+    "StreamGroupBlock": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": true
+    },
+    "StreamGroupComponent": {
       "type": "object",
       "properties": {
-        "key": {
-          "type": "string"
-        },
-        "value": {
-          "type": "string"
+        "subcomponents": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StreamGroupSubComponent"
+          },
+          "description": "Added in FFmpeg 7.0."
         }
       },
-      "required": [
-        "key",
-        "value"
-      ]
+      "additionalProperties": true
     },
-    "tagsType": {
+    "StreamGroupPiece": {
+      "type": "object",
+      "properties": {
+        "subpieces": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StreamGroupSubPiece"
+          },
+          "description": "Added in FFmpeg 7.0."
+        }
+      },
+      "additionalProperties": true
+    },
+    "StreamGroupSubComponent": {
+      "type": "object",
+      "properties": {
+        "pieces": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StreamGroupPiece"
+          },
+          "description": "Added in FFmpeg 7.0."
+        }
+      },
+      "additionalProperties": true
+    },
+    "StreamGroupSubPiece": {
+      "type": "object",
+      "properties": {
+        "blocks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StreamGroupBlock"
+          },
+          "description": "Added in FFmpeg 7.0."
+        }
+      },
+      "additionalProperties": true
+    },
+    "Tags": {
       "type": "object",
       "additionalProperties": {
         "type": "string"
       }
     }
-  }
+  },
+  "description": "ffprobe -print_format json output, unioned over FFmpeg n4.4.4, n5.1.4, n6.0.1, n6.1.2, n7.0.2, n7.1.3, n8.0, n8.1.2. Numeric fields accept both JSON numbers and numeric strings because ffprobe's JSON writer prints most of them as strings."
 }

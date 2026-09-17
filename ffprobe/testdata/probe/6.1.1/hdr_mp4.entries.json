@@ -1,0 +1,10 @@
+{
+    "programs": [
+
+    ],
+    "streams": [
+        { "index": 0, "codec_name": "hevc", "codec_type": "video",
+            "tags": { "language": "und" } }
+    ],
+    "format": { "filename": "ffprobe/testdata/media/hdr.mp4", "duration": "1.000000" }
+}

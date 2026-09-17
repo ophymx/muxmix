@@ -1,0 +1,14 @@
+{
+    "programs": [
+
+    ],
+    "stream_groups": [
+
+    ],
+    "streams": [
+        { "index": 0, "codec_name": "mp3", "codec_type": "audio" },
+        { "index": 1, "codec_name": "png", "codec_type": "video",
+            "tags": {  } }
+    ],
+    "format": { "filename": "ffprobe/testdata/media/cover.mp3", "duration": "1.032000" }
+}

@@ -1,0 +1,6 @@
+{
+    "packets": [
+        { "codec_type": "audio", "stream_index": 0, "pts": 0, "pts_time": "0.000000", "dts": 0, "dts_time": "0.000000", "duration": 2048, "duration_time": "0.256000", "size": "4096", "pos": "78", "flags": "K_" },
+        { "codec_type": "audio", "stream_index": 0, "pts": 2048, "pts_time": "0.256000", "dts": 2048, "dts_time": "0.256000", "duration": 1952, "duration_time": "0.244000", "size": "3904", "pos": "4174", "flags": "K_" }
+    ]
+}

@@ -1,0 +1,8 @@
+built alpine-3.20 ffprobe version 6.1.1 Copyright (c) 2007-2023 the FFmpeg developers
+built alpine-3.22 ffprobe version 6.1.2 Copyright (c) 2007-2024 the FFmpeg developers
+built alpine-edge ffprobe version 8.1.2 Copyright (c) 2007-2026 the FFmpeg developers
+built debian-12 ffprobe version 5.1.9-0+deb12u1 Copyright (c) 2007-2026 the FFmpeg developers
+built debian-13 ffprobe version 7.1.5-0+deb13u1 Copyright (c) 2007-2026 the FFmpeg developers
+built debian-sid ffprobe version 8.1.2-2+b3 Copyright (c) 2007-2026 the FFmpeg developers
+built ubuntu-22.04 ffprobe version 4.4.2-0ubuntu0.22.04.1 Copyright (c) 2007-2021 the FFmpeg developers
+built ubuntu-24.04 ffprobe version 6.1.1-3ubuntu5 Copyright (c) 2007-2023 the FFmpeg developers

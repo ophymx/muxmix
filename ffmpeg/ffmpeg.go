@@ -213,7 +213,6 @@ func (r *runner) RunWithOptions(ctx context.Context, options RunOptions) (*Resul
 		cmd.Dir = options.Dir
 	}
 
-	cmd.Stdout = io.MultiWriter(selectWriter(options.Stdout, r.stdout), &bytes.Buffer{})
 	stdoutBuf := &bytes.Buffer{}
 	cmd.Stdout = io.MultiWriter(selectWriter(options.Stdout, r.stdout), stdoutBuf)
 
