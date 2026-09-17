@@ -1,0 +1,29 @@
+Input #0, mov,mp4,m4a,3gp,3g2,mj2, from '/tmp/tmp.AnGrmKJQBS/i.mp4':
+  Metadata:
+    major_brand     : isom
+    minor_version   : 512
+    compatible_brands: isomiso2avc1mp41
+    encoder         : Lavf58.76.100
+  Duration: 00:00:01.96, start: 0.000000, bitrate: 797 kb/s
+  Stream #0:0(und): Video: h264 (Main) (avc1 / 0x31637661), yuv420p, 320x240 [SAR 1:1 DAR 4:3], 793 kb/s, 25 fps, 25 tbr, 12800 tbn, 50 tbc (default)
+    Metadata:
+      handler_name    : VideoHandler
+      vendor_id       : [0][0][0][0]
+Stream mapping:
+  Stream #0:0 -> #0:0 (h264 (native) -> wrapped_avframe (native))
+Output #0, null, to 'pipe:':
+  Metadata:
+    major_brand     : isom
+    minor_version   : 512
+    compatible_brands: isomiso2avc1mp41
+    encoder         : Lavf58.76.100
+  Stream #0:0(und): Video: wrapped_avframe, yuv420p(top coded first (swapped)), 320x240 [SAR 1:1 DAR 4:3], q=2-31, 200 kb/s, 25 fps, 25 tbn (default)
+    Metadata:
+      handler_name    : VideoHandler
+      vendor_id       : [0][0][0][0]
+      encoder         : Lavc58.134.100 wrapped_avframe
+frame=    1 fps=0.0 q=-0.0 size=N/A time=00:00:00.04 bitrate=N/A speed=5.93x    frame=   49 fps=0.0 q=-0.0 Lsize=N/A time=00:00:01.96 bitrate=N/A speed=88.9x    
+video:26kB audio:0kB subtitle:0kB other streams:0kB global headers:0kB muxing overhead: unknown
+[Parsed_idet_0 @ 0x55f07994b2c0] Repeated Fields: Neither:    49 Top:     0 Bottom:     0
+[Parsed_idet_0 @ 0x55f07994b2c0] Single frame detection: TFF:    48 BFF:     0 Progressive:     0 Undetermined:     1
+[Parsed_idet_0 @ 0x55f07994b2c0] Multi frame detection: TFF:    49 BFF:     0 Progressive:     0 Undetermined:     0

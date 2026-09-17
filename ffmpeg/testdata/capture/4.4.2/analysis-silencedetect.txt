@@ -1,0 +1,18 @@
+Guessed Channel Layout for Input Stream #0.0 : mono
+Input #0, wav, from '/tmp/tmp.AnGrmKJQBS/a.wav':
+  Metadata:
+    encoder         : Lavf58.76.100
+  Duration: 00:00:03.00, bitrate: 768 kb/s
+  Stream #0:0: Audio: pcm_s16le ([1][0][0][0] / 0x0001), 48000 Hz, mono, s16, 768 kb/s
+Stream mapping:
+  Stream #0:0 -> #0:0 (pcm_s16le (native) -> pcm_s16le (native))
+Output #0, null, to 'pipe:':
+  Metadata:
+    encoder         : Lavf58.76.100
+  Stream #0:0: Audio: pcm_s16le, 48000 Hz, mono, s16, 768 kb/s
+    Metadata:
+      encoder         : Lavc58.134.100 pcm_s16le
+size=N/A time=00:00:00.00 bitrate=N/A speed=   0x    [silencedetect @ 0x556452037ec0] silence_start: 1
+[silencedetect @ 0x556452037ec0] silence_end: 2.00002 | silence_duration: 1.00002
+size=N/A time=00:00:02.98 bitrate=N/A speed= 666x    
+video:0kB audio:281kB subtitle:0kB other streams:0kB global headers:0kB muxing overhead: unknown

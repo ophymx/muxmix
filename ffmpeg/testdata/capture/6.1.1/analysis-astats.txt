@@ -1,0 +1,36 @@
+[aist#0:0/pcm_s16le @ 0x5584bbab3400] Guessed Channel Layout: mono
+Input #0, wav, from '/tmp/tmp.sR5yhSrEvl/a.wav':
+  Metadata:
+    encoder         : Lavf60.16.100
+  Duration: 00:00:03.00, bitrate: 768 kb/s
+  Stream #0:0: Audio: pcm_s16le ([1][0][0][0] / 0x0001), 48000 Hz, 1 channels, s16, 768 kb/s
+Stream mapping:
+  Stream #0:0 -> #0:0 (pcm_s16le (native) -> pcm_s16le (native))
+Output #0, null, to 'pipe:':
+  Metadata:
+    encoder         : Lavf60.16.100
+  Stream #0:0: Audio: pcm_s16le, 48000 Hz, mono, s16, 768 kb/s
+    Metadata:
+      encoder         : Lavc60.31.102 pcm_s16le
+size=       0kB time=00:00:00.00 bitrate=N/A speed=N/A    [out#0/null @ 0x5584bba7c6c0] video:0kB audio:281kB subtitle:0kB other streams:0kB global headers:0kB muxing overhead: unknown
+size=N/A time=00:00:02.98 bitrate=N/A speed= 225x    
+[Parsed_astats_0 @ 0x5584bbabe300] Overall
+[Parsed_astats_0 @ 0x5584bbabe300] DC offset: -0.000000
+[Parsed_astats_0 @ 0x5584bbabe300] Min level: -32768.000000
+[Parsed_astats_0 @ 0x5584bbabe300] Max level: 32767.000000
+[Parsed_astats_0 @ 0x5584bbabe300] Min difference: 0.000000
+[Parsed_astats_0 @ 0x5584bbabe300] Max difference: 1887.000000
+[Parsed_astats_0 @ 0x5584bbabe300] Mean difference: 800.878020
+[Parsed_astats_0 @ 0x5584bbabe300] RMS difference: 1089.477117
+[Parsed_astats_0 @ 0x5584bbabe300] Peak level dB: 0.000265
+[Parsed_astats_0 @ 0x5584bbabe300] RMS level dB: -4.770937
+[Parsed_astats_0 @ 0x5584bbabe300] RMS peak dB: -2.994335
+[Parsed_astats_0 @ 0x5584bbabe300] RMS trough dB: -89.869883
+[Parsed_astats_0 @ 0x5584bbabe300] Flat factor: 0.000000
+[Parsed_astats_0 @ 0x5584bbabe300] Peak count: 480.000000
+[Parsed_astats_0 @ 0x5584bbabe300] Abs Peak count: 240.000000
+[Parsed_astats_0 @ 0x5584bbabe300] Noise floor dB: -inf
+[Parsed_astats_0 @ 0x5584bbabe300] Noise floor count: 46802.000000
+[Parsed_astats_0 @ 0x5584bbabe300] Entropy: 0.490981
+[Parsed_astats_0 @ 0x5584bbabe300] Bit depth: 16/16/16/16
+[Parsed_astats_0 @ 0x5584bbabe300] Number of samples: 144000

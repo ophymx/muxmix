@@ -1,0 +1,53 @@
+Input #0, mov,mp4,m4a,3gp,3g2,mj2, from '/tmp/tmp.NNGOJi/v.mp4':
+  Metadata:
+    major_brand     : isom
+    minor_version   : 512
+    compatible_brands: isomiso2avc1mp41
+    encoder         : Lavf60.16.100
+  Duration: 00:00:04.00, start: 0.000000, bitrate: 411 kb/s
+  Stream #0:0[0x1](und): Video: h264 (Constrained Baseline) (avc1 / 0x31637661), yuv420p(progressive), 360x280 [SAR 1:1 DAR 9:7], 408 kb/s, 25 fps, 25 tbr, 12800 tbn (default)
+    Metadata:
+      handler_name    : VideoHandler
+      vendor_id       : [0][0][0][0]
+      encoder         : Lavc60.31.102 libx264
+Stream mapping:
+  Stream #0:0 -> #0:0 (h264 (native) -> wrapped_avframe (native))
+Output #0, null, to 'pipe:':
+  Metadata:
+    major_brand     : isom
+    minor_version   : 512
+    compatible_brands: isomiso2avc1mp41
+    encoder         : Lavf60.16.100
+  Stream #0:0(und): Video: wrapped_avframe, yuv420p(progressive), 360x280 [SAR 1:1 DAR 9:7], q=2-31, 200 kb/s, 25 fps, 25 tbn (default)
+    Metadata:
+      handler_name    : VideoHandler
+      vendor_id       : [0][0][0][0]
+      encoder         : Lavc60.31.102 wrapped_avframe
+frame=    0 fps=0.0 q=-0.0 size=       0kB time=00:00:00.00 bitrate=N/A speed=   0x    [Parsed_blackframe_0 @ 0x7f69172fcec0] frame:25 pblack:100 pts:12800 t:1.000000 type:P last_keyframe:0
+[Parsed_blackframe_0 @ 0x7f69172fcec0] frame:26 pblack:100 pts:13312 t:1.040000 type:P last_keyframe:0
+[Parsed_blackframe_0 @ 0x7f69172fcec0] frame:27 pblack:100 pts:13824 t:1.080000 type:P last_keyframe:0
+[Parsed_blackframe_0 @ 0x7f69172fcec0] frame:28 pblack:100 pts:14336 t:1.120000 type:P last_keyframe:0
+[Parsed_blackframe_0 @ 0x7f69172fcec0] frame:29 pblack:100 pts:14848 t:1.160000 type:P last_keyframe:0
+[Parsed_blackframe_0 @ 0x7f69172fcec0] frame:30 pblack:100 pts:15360 t:1.200000 type:P last_keyframe:0
+[Parsed_blackframe_0 @ 0x7f69172fcec0] frame:31 pblack:100 pts:15872 t:1.240000 type:P last_keyframe:0
+[Parsed_blackframe_0 @ 0x7f69172fcec0] frame:32 pblack:100 pts:16384 t:1.280000 type:P last_keyframe:0
+[Parsed_blackframe_0 @ 0x7f69172fcec0] frame:33 pblack:100 pts:16896 t:1.320000 type:P last_keyframe:0
+[Parsed_blackframe_0 @ 0x7f69172fcec0] frame:34 pblack:100 pts:17408 t:1.360000 type:P last_keyframe:0
+[Parsed_blackframe_0 @ 0x7f69172fcec0] frame:35 pblack:100 pts:17920 t:1.400000 type:P last_keyframe:0
+[Parsed_blackframe_0 @ 0x7f69172fcec0] frame:36 pblack:100 pts:18432 t:1.440000 type:P last_keyframe:0
+[Parsed_blackframe_0 @ 0x7f69172fcec0] frame:37 pblack:100 pts:18944 t:1.480000 type:P last_keyframe:0
+[Parsed_blackframe_0 @ 0x7f69172fcec0] frame:38 pblack:100 pts:19456 t:1.520000 type:P last_keyframe:0
+[Parsed_blackframe_0 @ 0x7f69172fcec0] frame:39 pblack:100 pts:19968 t:1.560000 type:P last_keyframe:0
+[Parsed_blackframe_0 @ 0x7f69172fcec0] frame:40 pblack:100 pts:20480 t:1.600000 type:P last_keyframe:0
+[Parsed_blackframe_0 @ 0x7f69172fcec0] frame:41 pblack:100 pts:20992 t:1.640000 type:P last_keyframe:0
+[Parsed_blackframe_0 @ 0x7f69172fcec0] frame:42 pblack:100 pts:21504 t:1.680000 type:P last_keyframe:0
+[Parsed_blackframe_0 @ 0x7f69172fcec0] frame:43 pblack:100 pts:22016 t:1.720000 type:P last_keyframe:0
+[Parsed_blackframe_0 @ 0x7f69172fcec0] frame:44 pblack:100 pts:22528 t:1.760000 type:P last_keyframe:0
+[Parsed_blackframe_0 @ 0x7f69172fcec0] frame:45 pblack:100 pts:23040 t:1.800000 type:P last_keyframe:0
+[Parsed_blackframe_0 @ 0x7f69172fcec0] frame:46 pblack:100 pts:23552 t:1.840000 type:P last_keyframe:0
+[Parsed_blackframe_0 @ 0x7f69172fcec0] frame:47 pblack:100 pts:24064 t:1.880000 type:P last_keyframe:0
+[Parsed_blackframe_0 @ 0x7f69172fcec0] frame:48 pblack:100 pts:24576 t:1.920000 type:P last_keyframe:0
+[Parsed_blackframe_0 @ 0x7f69172fcec0] frame:49 pblack:100 pts:25088 t:1.960000 type:P last_keyframe:0
+[Parsed_blackframe_0 @ 0x7f69172fcec0] frame:50 pblack:100 pts:25600 t:2.000000 type:P last_keyframe:0
+[out#0/null @ 0x7f691b895680] video:47kB audio:0kB subtitle:0kB other streams:0kB global headers:0kB muxing overhead: unknown
+frame=  100 fps=0.0 q=-0.0 Lsize=N/A time=00:00:03.96 bitrate=N/A speed= 101x    

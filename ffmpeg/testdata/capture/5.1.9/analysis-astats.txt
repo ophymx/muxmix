@@ -1,0 +1,35 @@
+Guessed Channel Layout for Input Stream #0.0 : mono
+Input #0, wav, from '/tmp/tmp.D0Kc244Xbf/a.wav':
+  Metadata:
+    encoder         : Lavf59.27.100
+  Duration: 00:00:03.00, bitrate: 768 kb/s
+  Stream #0:0: Audio: pcm_s16le ([1][0][0][0] / 0x0001), 48000 Hz, mono, s16, 768 kb/s
+Stream mapping:
+  Stream #0:0 -> #0:0 (pcm_s16le (native) -> pcm_s16le (native))
+Output #0, null, to 'pipe:':
+  Metadata:
+    encoder         : Lavf59.27.100
+  Stream #0:0: Audio: pcm_s16le, 48000 Hz, mono, s16, 768 kb/s
+    Metadata:
+      encoder         : Lavc59.37.100 pcm_s16le
+size=N/A time=00:00:00.04 bitrate=N/A speed=4.27e+04x    size=N/A time=00:00:03.00 bitrate=N/A speed= 286x    
+video:0kB audio:281kB subtitle:0kB other streams:0kB global headers:0kB muxing overhead: unknown
+[Parsed_astats_0 @ 0x55f727fdc040] Overall
+[Parsed_astats_0 @ 0x55f727fdc040] DC offset: -0.000000
+[Parsed_astats_0 @ 0x55f727fdc040] Min level: -32768.000000
+[Parsed_astats_0 @ 0x55f727fdc040] Max level: 32767.000000
+[Parsed_astats_0 @ 0x55f727fdc040] Min difference: 0.000000
+[Parsed_astats_0 @ 0x55f727fdc040] Max difference: 1887.000000
+[Parsed_astats_0 @ 0x55f727fdc040] Mean difference: 800.878020
+[Parsed_astats_0 @ 0x55f727fdc040] RMS difference: 1089.477117
+[Parsed_astats_0 @ 0x55f727fdc040] Peak level dB: 0.000265
+[Parsed_astats_0 @ 0x55f727fdc040] RMS level dB: -4.770937
+[Parsed_astats_0 @ 0x55f727fdc040] RMS peak dB: -2.994335
+[Parsed_astats_0 @ 0x55f727fdc040] RMS trough dB: -89.869883
+[Parsed_astats_0 @ 0x55f727fdc040] Flat factor: 0.000000
+[Parsed_astats_0 @ 0x55f727fdc040] Peak count: 480.000000
+[Parsed_astats_0 @ 0x55f727fdc040] Noise floor dB: -inf
+[Parsed_astats_0 @ 0x55f727fdc040] Noise floor count: 45602.000000
+[Parsed_astats_0 @ 0x55f727fdc040] Entropy: 0.490981
+[Parsed_astats_0 @ 0x55f727fdc040] Bit depth: 16/16
+[Parsed_astats_0 @ 0x55f727fdc040] Number of samples: 144000

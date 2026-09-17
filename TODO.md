@@ -17,6 +17,9 @@ raw argument lists.
 
 ## 3. ffmpeg: higher-level codec builder (in progress)
 
+`ffmpeg/analyze` covers the analysis side (loudnorm two-pass, silence/black/freeze/scene
+detection, cropdetect, idet, ebur128, volumedetect, astats).
+
 `ffmpeg.Command` now models inputs, outputs, maps and options, and the option constructors
 cover the common encoder knobs; `ffmpeg/caps` reports what the installed build supports and
 the option tables of each component. What is still missing is the codec-specific layer above

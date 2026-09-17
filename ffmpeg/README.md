@@ -47,7 +47,8 @@ Anything else goes through `Set(name, value)`, `Flag(name)` or
 `filtergraph` builds `-filter_complex` graphs; `hwaccel.InputOpt` and
 `hwaccel.EncodeOpt` return the options for a hardware backend; `caps`
 reports which encoders, formats and filters the binary has and what options
-they take.
+they take; `analyze` runs the analysis filters (loudnorm, silencedetect,
+cropdetect, ...) and returns typed results.
 
 ## Running
 
