@@ -12,20 +12,12 @@ in `ffprobe/helpers.go`, the typed side data in `ffprobe/sidedata.go`, and
 `ffmpeg.Opt` values that plug straight into `ffmpeg.Command`; `BuildEncodeArgs` remains for
 raw argument lists.
 
-## 3. ffmpeg: higher-level codec builder (in progress)
+## 3. ffmpeg: higher-level codec builder (done)
 
-`ffmpeg/analyze` covers the analysis side (loudnorm two-pass, silence/black/freeze/scene
-detection, cropdetect, idet, ebur128, volumedetect, astats).
-
-`ffmpeg.Command` now models inputs, outputs, maps and options, and the option constructors
-cover the common encoder knobs; `ffmpeg/caps` reports what the installed build supports and
-the option tables of each component. What is still missing is the codec-specific layer above
-them: per-encoder presets and rate-control profiles, two-pass orchestration, and a
-`Command.Check(set)` that validates encoders, formats and option values against `caps`.
-
-Transcoder commands outside of this repository are currently being used to experiment with what
-codec-specific builder APIs should look like before anything is added here. Once patterns
-stabilize there, extract them into the `ffmpeg` package.
+`ffmpeg/encode` provides encoder-neutral `Video`, `Audio` and `Image` settings with one
+quality scale and one speed scale mapped onto each encoder's own options, encoder selection
+from `caps` and `hwaccel`, and `tasks` builds on it for thumbnails, trickplay, previews and
+waveforms. Still open: two-pass orchestration and probe-driven stream mapping.
 
 ## 4. hwaccel: marshal/unmarshal SystemSupport for caching (done)
 

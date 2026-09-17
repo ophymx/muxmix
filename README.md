@@ -4,10 +4,12 @@ Go packages for driving `ffmpeg` and `ffprobe`.
 
 | Package                | What it does                                                          |
 |------------------------|-----------------------------------------------------------------------|
+| `tasks`                | Thumbnails, trickplay sprite sheets, previews, waveforms              |
 | `ffprobe`              | Typed, version-tolerant ffprobe results; streaming packet/frame reads |
 | `ffmpeg`               | Structured commands, live progress, graceful cancel, version parsing  |
 | `ffmpeg/analyze`       | Typed results from analysis filters: loudness, silence, black, crop, scenes |
 | `ffmpeg/caps`          | What an ffmpeg build supports: codecs, formats, filters, option tables |
+| `ffmpeg/encode`        | Encoder-neutral video, audio and image settings                       |
 | `ffmpeg/filtergraph`   | Build and validate filtergraph strings                                |
 | `ffmpeg/hwaccel`       | Detect built-in and actually usable hardware acceleration             |
 
