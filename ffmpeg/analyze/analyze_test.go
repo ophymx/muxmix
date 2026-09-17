@@ -161,28 +161,28 @@ func TestLive(t *testing.T) {
 	}
 	ctx := context.Background()
 	tone := `aevalsrc=sin(440*2*PI*t)*(lt(t\,1)+gt(t\,2)):s=48000:d=3`
-	sil, err := analyze.Silence(ctx, nil, tone, analyze.SilenceOptions{NoiseDB: -50, MinDuration: 500 * time.Millisecond}, ffmpeg.Lavfi())
+	sil, err := analyze.Silence(ctx, tone, analyze.SilenceOptions{NoiseDB: -50, MinDuration: 500 * time.Millisecond}, ffmpeg.Lavfi())
 	if err != nil || len(sil) != 1 || !nearD(sil[0].Start, time.Second, 50*time.Millisecond) {
 		t.Errorf("silence = %+v %v", sil, err)
 	}
-	ln, err := analyze.Loudnorm(ctx, nil, tone, analyze.DefaultLoudnormTargets, ffmpeg.Lavfi())
+	ln, err := analyze.Loudnorm(ctx, tone, analyze.DefaultLoudnormTargets, ffmpeg.Lavfi())
 	if err != nil || !near(ln.InputI, -4.4, 0.5) {
 		t.Errorf("loudnorm = %+v %v", ln, err)
 	}
-	vol, err := analyze.VolumeDetect(ctx, nil, tone, ffmpeg.Lavfi())
+	vol, err := analyze.VolumeDetect(ctx, tone, ffmpeg.Lavfi())
 	if err != nil || vol.Samples != 144000 {
 		t.Errorf("volume = %+v %v", vol, err)
 	}
 	video := "testsrc2=size=64x64:rate=25:duration=1,pad=80:80:8:8"
-	crop, err := analyze.CropDetect(ctx, nil, video, analyze.CropOptions{Round: 2}, ffmpeg.Lavfi())
+	crop, err := analyze.CropDetect(ctx, video, analyze.CropOptions{Round: 2}, ffmpeg.Lavfi())
 	if err != nil || crop.Width != 64 || crop.X != 8 {
 		t.Errorf("crop = %+v %v", crop, err)
 	}
-	black, err := analyze.Black(ctx, nil, "color=c=black:size=64x64:rate=25:duration=1", analyze.BlackOptions{MinDuration: 500 * time.Millisecond}, ffmpeg.Lavfi())
+	black, err := analyze.Black(ctx, "color=c=black:size=64x64:rate=25:duration=1", analyze.BlackOptions{MinDuration: 500 * time.Millisecond}, ffmpeg.Lavfi())
 	if err != nil || len(black) != 1 || black[0].Start != 0 {
 		t.Errorf("black = %+v %v", black, err)
 	}
-	if _, err := analyze.Black(ctx, nil, filepath.Join(t.TempDir(), "missing.mp4"), analyze.BlackOptions{}); err == nil {
+	if _, err := analyze.Black(ctx, filepath.Join(t.TempDir(), "missing.mp4"), analyze.BlackOptions{}); err == nil {
 		t.Error("expected error for missing input")
 	}
 }

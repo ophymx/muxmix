@@ -38,7 +38,7 @@ func TestPassCommand(t *testing.T) {
 		t.Errorf("single = %s", got)
 	}
 	copyOnly := ffmpeg.NewCommand().Input("in").Output("out.mp4", ffmpeg.CopyAll())
-	if _, err := ffmpeg.TwoPass(context.Background(), nil, copyOnly, ffmpeg.TwoPassOptions{}); err == nil {
+	if _, err := ffmpeg.TwoPass(context.Background(), copyOnly, ffmpeg.TwoPassOptions{}); err == nil {
 		t.Error("expected error when nothing encodes video")
 	}
 }
@@ -54,7 +54,7 @@ func TestTwoPassLive(t *testing.T) {
 			ffmpeg.VideoCodec("libx264"), ffmpeg.Preset("ultrafast"), ffmpeg.BitRate("v", "200k"), ffmpeg.PixFmt("yuv420p"),
 			ffmpeg.AudioCodec("aac"))
 	var passes []int
-	res, err := ffmpeg.TwoPass(ctx, nil, cmd, ffmpeg.TwoPassOptions{
+	res, err := ffmpeg.TwoPass(ctx, cmd, ffmpeg.TwoPassOptions{
 		Duration: 2 * time.Second,
 		OnProgress: func(p ffmpeg.TwoPassProgress) {
 			if len(passes) == 0 || passes[len(passes)-1] != p.Pass {

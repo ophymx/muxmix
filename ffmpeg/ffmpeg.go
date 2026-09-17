@@ -17,6 +17,16 @@
 // Cancelling the context sends ffmpeg SIGINT first, which lets it finish
 // writing the container trailer, and kills it only if it has not exited
 // within the grace period.
+//
+// Two kinds of options appear throughout: a RunnerOption (WithBinary,
+// WithStderr, ...) configures a Runner once, and a RunOption (OnProgress,
+// Stderr, Env, ...) applies to a single run. Command options are the Opt
+// values in command.go.
+//
+// Numeric fields that ffmpeg did not report hold -1 (Progress.Speed,
+// Progress.Fraction, VersionInfo.Patch); a duration it did not report is
+// also -1. Values that can legitimately be negative, such as loudness in
+// dB, use NaN instead; see package analyze.
 package ffmpeg
 
 import (
@@ -38,7 +48,12 @@ var (
 
 // Runner executes ffmpeg.
 type Runner interface {
-	// Run executes a Command with the runner's defaults applied.
+	// Run executes a Command with the runner's defaults applied
+	// (-hide_banner, -nostdin, -loglevel error and -y unless the command
+	// sets them). On failure the error is an *Error wrapping the cause,
+	// and the Result is still returned whenever ffmpeg was started, so
+	// its log and progress can be inspected; it is nil only when the
+	// command failed validation or could not be launched.
 	Run(ctx context.Context, cmd *Command, opts ...RunOption) (*Result, error)
 	// RunArgs executes ffmpeg with exactly the given arguments.
 	RunArgs(ctx context.Context, args []string, opts ...RunOption) (*Result, error)
@@ -143,8 +158,9 @@ func (r *Result) errorTail() string {
 
 // ─── runner construction ───────────────────────────────────────────────────
 
-// Option configures a Runner.
-type Option func(*runner)
+// RunnerOption configures a Runner at construction; see RunOption for
+// per-run settings.
+type RunnerOption func(*runner)
 
 type runner struct {
 	binary string
@@ -158,7 +174,7 @@ type runner struct {
 var DefaultRunner Runner = New()
 
 // New creates a Runner.
-func New(options ...Option) Runner {
+func New(options ...RunnerOption) Runner {
 	r := &runner{binary: "ffmpeg", grace: 5 * time.Second}
 	for _, opt := range options {
 		opt(r)
@@ -167,7 +183,7 @@ func New(options ...Option) Runner {
 }
 
 // WithBinary sets the ffmpeg executable path.
-func WithBinary(binary string) Option {
+func WithBinary(binary string) RunnerOption {
 	return func(r *runner) {
 		if binary != "" {
 			r.binary = binary
@@ -175,26 +191,28 @@ func WithBinary(binary string) Option {
 	}
 }
 
-// WithEnv replaces the process environment for ffmpeg runs.
-func WithEnv(env ...string) Option {
+// WithEnv replaces the process environment for every run: ffmpeg sees
+// exactly env, not os.Environ. To add variables on top of the inherited
+// environment use the per-run Env option instead.
+func WithEnv(env ...string) RunnerOption {
 	return func(r *runner) { r.env = append([]string(nil), env...) }
 }
 
 // WithStdout forwards ffmpeg's stdout to w on every run, in addition to
 // capturing it.
-func WithStdout(w io.Writer) Option {
+func WithStdout(w io.Writer) RunnerOption {
 	return func(r *runner) { r.stdout = w }
 }
 
 // WithStderr forwards ffmpeg's log output to w on every run, in addition to
 // capturing it.
-func WithStderr(w io.Writer) Option {
+func WithStderr(w io.Writer) RunnerOption {
 	return func(r *runner) { r.stderr = w }
 }
 
 // WithGrace sets how long a cancelled ffmpeg gets to exit after SIGINT
 // before it is killed (default 5s).
-func WithGrace(d time.Duration) Option {
+func WithGrace(d time.Duration) RunnerOption {
 	return func(r *runner) { r.grace = d }
 }
 
@@ -213,8 +231,12 @@ type runConfig struct {
 	report         bool
 	reportPath     string
 	interval       time.Duration
+	total          time.Duration
 	noProgressPipe bool
 	noDefaults     bool
+	// leading counts the default global args Run put in front of the
+	// command, so run can slot the progress options right after them.
+	leading int
 }
 
 // OnProgress receives progress updates while ffmpeg runs. It is called from
@@ -244,7 +266,8 @@ func Dir(dir string) RunOption {
 	return func(c *runConfig) { c.dir = dir }
 }
 
-// Env appends environment variables for the run.
+// Env appends environment variables ("KEY=value") to the runner's
+// environment for this run.
 func Env(kv ...string) RunOption {
 	return func(c *runConfig) { c.env = append(c.env, kv...) }
 }
@@ -254,6 +277,13 @@ func Env(kv ...string) RunOption {
 // contents in Result.Report. The caller removes the file.
 func Report(path string) RunOption {
 	return func(c *runConfig) { c.report = true; c.reportPath = path }
+}
+
+// TotalDuration tells the run how long the output will be, so every
+// Progress carries a Fraction and ETA. Use the input's duration (from
+// ffprobe) adjusted for any -ss/-t trimming.
+func TotalDuration(d time.Duration) RunOption {
+	return func(c *runConfig) { c.total = d }
 }
 
 // ProgressInterval sets how often progress is reported (-stats_period,
@@ -318,6 +348,7 @@ func (r *runner) Run(ctx context.Context, cmd *Command, opts ...RunOption) (*Res
 			args = append(args, "-y")
 		}
 	}
+	c.leading = len(args)
 	args = append(args, cmd.Args()...)
 	return r.run(ctx, args, &c)
 }
@@ -331,9 +362,6 @@ func (r *runner) RunArgs(ctx context.Context, args []string, opts ...RunOption) 
 }
 
 func (r *runner) run(ctx context.Context, args []string, c *runConfig) (*Result, error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
 	res := &Result{Binary: r.binary, StartedAt: time.Now()}
 	finish := func(err error) (*Result, error) {
 		res.FinishedAt = time.Now()
@@ -349,8 +377,9 @@ func (r *runner) run(ctx context.Context, args []string, c *runConfig) (*Result,
 	var progressChild *os.File
 	usePipe := c.onProgress != nil && !c.noProgressPipe && supportsExtraFiles()
 	if c.onProgress != nil {
+		var extra []string
 		if c.interval > 0 {
-			args = insertBeforeFirstInput(args, "-stats_period", formatSeconds(c.interval))
+			extra = append(extra, "-stats_period", formatSeconds(c.interval))
 		}
 		if usePipe {
 			pr, pw, err := os.Pipe()
@@ -358,10 +387,13 @@ func (r *runner) run(ctx context.Context, args []string, c *runConfig) (*Result,
 				return finish(err)
 			}
 			progressPipe, progressChild = pr, pw
-			args = insertBeforeFirstInput(args, "-progress", "pipe:3")
+			extra = append(extra, "-progress", "pipe:3")
 		} else {
-			args = insertBeforeFirstInput(args, "-stats")
+			extra = append(extra, "-stats")
 		}
+		// Global options go with the other globals, ahead of every input,
+		// so Result.Args reads naturally.
+		args = append(append(append([]string(nil), args[:c.leading]...), extra...), args[c.leading:]...)
 	}
 	res.Args = args
 
@@ -413,6 +445,15 @@ func (r *runner) run(ctx context.Context, args []string, c *runConfig) (*Result,
 	// Progress readers run in their own goroutine and signal on done.
 	done := make(chan struct{})
 	deliver := func(p Progress) {
+		p.Fraction, p.ETA = -1, -1
+		if c.total > 0 {
+			p.Fraction = min(float64(p.Time)/float64(c.total), 1)
+			if p.Done {
+				p.Fraction, p.ETA = 1, 0
+			} else if p.Speed > 0 {
+				p.ETA = time.Duration(float64(max(c.total-p.Time, 0)) / p.Speed)
+			}
+		}
 		res.Progress = p
 		if c.onProgress != nil {
 			c.onProgress(p)
@@ -493,21 +534,6 @@ func (r *runner) run(ctx context.Context, args []string, c *runConfig) (*Result,
 		return finish(waitErr)
 	}
 	return finish(nil)
-}
-
-// insertBeforeFirstInput places global options ahead of the first -i so
-// they apply to the whole run regardless of how args were built.
-func insertBeforeFirstInput(args []string, opt ...string) []string {
-	for i, a := range args {
-		if a == "-i" {
-			out := make([]string, 0, len(args)+len(opt))
-			out = append(out, args[:i]...)
-			out = append(out, opt...)
-			out = append(out, args[i:]...)
-			return out
-		}
-	}
-	return append(args, opt...)
 }
 
 func formatSeconds(d time.Duration) string {

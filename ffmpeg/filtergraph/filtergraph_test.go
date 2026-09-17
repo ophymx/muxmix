@@ -20,22 +20,22 @@ func TestNamedArgs(t *testing.T) {
 		},
 		{
 			name:     "single key-value",
-			args:     namedArgs{"width": "1920"},
+			args:     namedArgs{{"width", "1920"}},
 			expected: "width=1920",
 		},
 		{
 			name:     "multiple key-values",
-			args:     namedArgs{"width": "1920", "height": "1080"},
+			args:     namedArgs{{"width", "1920"}, {"height", "1080"}},
 			expected: "width=1920:height=1080",
 		},
 		{
 			name:     "flag argument",
-			args:     namedArgs{"enable": ""},
+			args:     namedArgs{{"enable", ""}},
 			expected: "enable",
 		},
 		{
 			name:     "mixed flag and values",
-			args:     namedArgs{"width": "1920", "enable": "", "height": "1080"},
+			args:     namedArgs{{"width", "1920"}, {"enable", ""}, {"height", "1080"}},
 			expected: "width=1920:enable:height=1080",
 		},
 	}
@@ -346,7 +346,7 @@ func TestCommonFilters(t *testing.T) {
 		{
 			name:     "fps filter",
 			chain:    func() *FilterChain { return NewFilterChain().FPS(30.0) },
-			contains: []string{"fps", "fps=30.00"},
+			contains: []string{"fps=30"},
 		},
 		{
 			name:     "format filter",
@@ -366,7 +366,7 @@ func TestCommonFilters(t *testing.T) {
 		{
 			name:     "volume filter",
 			chain:    func() *FilterChain { return NewFilterChain().Volume(0.8) },
-			contains: []string{"volume", "volume=0.80"},
+			contains: []string{"volume=0.8"},
 		},
 		{
 			name:     "complex chain",
@@ -585,7 +585,7 @@ func TestJSONSerialization(t *testing.T) {
 	if len(g2.Chains[0].Filters) != 2 {
 		t.Errorf("Expected 2 filters, got %d", len(g2.Chains[0].Filters))
 	}
-	if want := "[0:v]scale=h=1080:w=1920,fps=fps=30.00[output]"; g2.String() != want {
+	if want := "[0:v]scale=w=1920:h=1080,fps=30[output]"; g2.String() != want {
 		t.Errorf("round-tripped graph = %q, want %q", g2.String(), want)
 	}
 }

@@ -36,9 +36,18 @@ func (f *Filter) WithArgs(args FilterArguments) *Filter {
 	return f
 }
 
-// WithNamedArgs sets key-value arguments for the filter
+// WithNamedArgs sets key=value arguments from a map; they render in key
+// order. Use WithArg to control the order.
 func (f *Filter) WithNamedArgs(args map[string]string) *Filter {
-	f.Args = namedArgs(args)
+	f.Args = namedArgsFromMap(args)
+	return f
+}
+
+// WithArg appends one key=value argument, keeping the order arguments
+// were added in. It replaces any positional arguments set earlier.
+func (f *Filter) WithArg(key, value string) *Filter {
+	named, _ := f.Args.(namedArgs)
+	f.Args = append(named, namedArg{key, value})
 	return f
 }
 
@@ -142,7 +151,7 @@ func (f *Filter) MarshalJSON() ([]byte, error) {
 
 	if f.Args != nil {
 		if kv, ok := f.Args.(namedArgs); ok {
-			aux.Args = map[string]string(kv)
+			aux.Args = kv
 		} else if pos, ok := f.Args.(positionalArgs); ok {
 			aux.Args = []string(pos)
 		} else {
@@ -167,9 +176,9 @@ func (f *Filter) UnmarshalJSON(data []byte) error {
 	}
 
 	if len(aux.Args) > 0 {
-		var m map[string]string
-		if err := json.Unmarshal(aux.Args, &m); err == nil {
-			f.Args = namedArgs(m)
+		var named namedArgs
+		if err := json.Unmarshal(aux.Args, &named); err == nil {
+			f.Args = named
 		} else {
 			var s []string
 			if err := json.Unmarshal(aux.Args, &s); err == nil {
@@ -179,7 +188,7 @@ func (f *Filter) UnmarshalJSON(data []byte) error {
 				if err := json.Unmarshal(aux.Args, &str); err != nil {
 					return fmt.Errorf("failed to unmarshal args: %v", err)
 				}
-				f.Args = namedArgs{"value": str}
+				f.Args = namedArgs{{"value", str}}
 			}
 		}
 	}

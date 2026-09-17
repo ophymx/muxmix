@@ -41,9 +41,14 @@ func (s *LoudnormStats) SecondPass(t LoudnormTargets) string {
 }
 
 // Loudnorm runs the loudnorm measurement pass (first of two).
-func Loudnorm(ctx context.Context, r ffmpeg.Runner, input string, t LoudnormTargets, inputOpts ...ffmpeg.Opt) (*LoudnormStats, error) {
+func Loudnorm(ctx context.Context, input string, t LoudnormTargets, inputOpts ...ffmpeg.Opt) (*LoudnormStats, error) {
+	return Default.Loudnorm(ctx, input, t, inputOpts...)
+}
+
+// Loudnorm is Loudnorm on this Analyzer's runner.
+func (a *Analyzer) Loudnorm(ctx context.Context, input string, t LoudnormTargets, inputOpts ...ffmpeg.Opt) (*LoudnormStats, error) {
 	filter := fmt.Sprintf("loudnorm=I=%s:TP=%s:LRA=%s:print_format=json", formatFloat(t.I), formatFloat(t.TP), formatFloat(t.LRA))
-	log, err := run(ctx, r, input, false, filter, inputOpts)
+	log, err := run(ctx, a.runner(), input, false, filter, inputOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -55,7 +60,7 @@ func ParseLoudnorm(log string) (*LoudnormStats, error) {
 	start := strings.LastIndex(log, "{")
 	end := strings.LastIndex(log, "}")
 	if start < 0 || end < start {
-		return nil, fmt.Errorf("analyze: no loudnorm JSON block in log")
+		return nil, fmt.Errorf("%w: no loudnorm JSON block in log", ErrNoResult)
 	}
 	var raw map[string]string
 	if err := json.Unmarshal([]byte(log[start:end+1]), &raw); err != nil {
@@ -90,8 +95,13 @@ type Loudness struct {
 
 // Ebur128 measures the input with the ebur128 filter, including sample and
 // true peaks.
-func Ebur128(ctx context.Context, r ffmpeg.Runner, input string, inputOpts ...ffmpeg.Opt) (*Loudness, error) {
-	log, err := run(ctx, r, input, false, "ebur128=peak=true+sample", inputOpts)
+func Ebur128(ctx context.Context, input string, inputOpts ...ffmpeg.Opt) (*Loudness, error) {
+	return Default.Ebur128(ctx, input, inputOpts...)
+}
+
+// Ebur128 is Ebur128 on this Analyzer's runner.
+func (a *Analyzer) Ebur128(ctx context.Context, input string, inputOpts ...ffmpeg.Opt) (*Loudness, error) {
+	log, err := run(ctx, a.runner(), input, false, "ebur128=peak=true+sample", inputOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +112,7 @@ func Ebur128(ctx context.Context, r ffmpeg.Runner, input string, inputOpts ...ff
 func ParseEbur128(log string) (*Loudness, error) {
 	idx := strings.LastIndex(log, "Summary:")
 	if idx < 0 {
-		return nil, fmt.Errorf("analyze: no ebur128 summary in log")
+		return nil, fmt.Errorf("%w: no ebur128 summary in log", ErrNoResult)
 	}
 	l := &Loudness{SamplePeak: math.NaN(), TruePeak: math.NaN()}
 	section := ""
@@ -158,8 +168,13 @@ type Volume struct {
 func (v *Volume) Headroom() float64 { return -v.MaxDB }
 
 // VolumeDetect runs the volumedetect filter.
-func VolumeDetect(ctx context.Context, r ffmpeg.Runner, input string, inputOpts ...ffmpeg.Opt) (*Volume, error) {
-	log, err := run(ctx, r, input, false, "volumedetect", inputOpts)
+func VolumeDetect(ctx context.Context, input string, inputOpts ...ffmpeg.Opt) (*Volume, error) {
+	return Default.VolumeDetect(ctx, input, inputOpts...)
+}
+
+// VolumeDetect is VolumeDetect on this Analyzer's runner.
+func (a *Analyzer) VolumeDetect(ctx context.Context, input string, inputOpts ...ffmpeg.Opt) (*Volume, error) {
+	log, err := run(ctx, a.runner(), input, false, "volumedetect", inputOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -202,7 +217,7 @@ func ParseVolumeDetect(log string) (*Volume, error) {
 		}
 	}
 	if best == nil {
-		return nil, fmt.Errorf("analyze: no volumedetect output in log")
+		return nil, fmt.Errorf("%w: no volumedetect output in log", ErrNoResult)
 	}
 	return best, nil
 }
@@ -211,12 +226,17 @@ func ParseVolumeDetect(log string) (*Volume, error) {
 
 // SilenceOptions configures silence detection.
 type SilenceOptions struct {
-	NoiseDB     float64       // threshold below which audio counts as silence; default -60 dB
+	NoiseDB     float64       // threshold below which audio counts as silence; 0 means the default -60 dB
 	MinDuration time.Duration // shortest silence to report; default 2s
 }
 
 // Silence runs silencedetect and returns the silent intervals.
-func Silence(ctx context.Context, r ffmpeg.Runner, input string, o SilenceOptions, inputOpts ...ffmpeg.Opt) ([]Interval, error) {
+func Silence(ctx context.Context, input string, o SilenceOptions, inputOpts ...ffmpeg.Opt) ([]Interval, error) {
+	return Default.Silence(ctx, input, o, inputOpts...)
+}
+
+// Silence is Silence on this Analyzer's runner.
+func (a *Analyzer) Silence(ctx context.Context, input string, o SilenceOptions, inputOpts ...ffmpeg.Opt) ([]Interval, error) {
 	if o.NoiseDB == 0 {
 		o.NoiseDB = -60
 	}
@@ -224,7 +244,7 @@ func Silence(ctx context.Context, r ffmpeg.Runner, input string, o SilenceOption
 		o.MinDuration = 2 * time.Second
 	}
 	filter := fmt.Sprintf("silencedetect=n=%sdB:d=%s", formatFloat(o.NoiseDB), formatFloat(o.MinDuration.Seconds()))
-	log, err := run(ctx, r, input, false, filter, inputOpts)
+	log, err := run(ctx, a.runner(), input, false, filter, inputOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -286,8 +306,13 @@ type AudioStats struct {
 }
 
 // AStats runs astats and returns the overall statistics.
-func AStats(ctx context.Context, r ffmpeg.Runner, input string, inputOpts ...ffmpeg.Opt) (*AudioStats, error) {
-	log, err := run(ctx, r, input, false, "astats=measure_perchannel=none", inputOpts)
+func AStats(ctx context.Context, input string, inputOpts ...ffmpeg.Opt) (*AudioStats, error) {
+	return Default.AStats(ctx, input, inputOpts...)
+}
+
+// AStats is AStats on this Analyzer's runner.
+func (a *Analyzer) AStats(ctx context.Context, input string, inputOpts ...ffmpeg.Opt) (*AudioStats, error) {
+	log, err := run(ctx, a.runner(), input, false, "astats=measure_perchannel=none", inputOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -298,7 +323,7 @@ func AStats(ctx context.Context, r ffmpeg.Runner, input string, inputOpts ...ffm
 func ParseAStats(log string) (*AudioStats, error) {
 	idx := strings.LastIndex(log, "] Overall")
 	if idx < 0 {
-		return nil, fmt.Errorf("analyze: no astats overall section in log")
+		return nil, fmt.Errorf("%w: no astats overall section in log", ErrNoResult)
 	}
 	s := &AudioStats{Raw: map[string]string{}}
 	for _, ln := range lines(log[idx:]) {

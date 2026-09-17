@@ -25,6 +25,12 @@ type Progress struct {
 	Speed      float64 // realtime multiple, -1 when unknown
 	Done       bool    // final update ("progress=end" or the Lsize stats line)
 
+	// Fraction of the output written, 0 to 1, and the estimated time
+	// remaining. Both are -1 unless the run was given TotalDuration; the
+	// readers below leave them zero.
+	Fraction float64
+	ETA      time.Duration
+
 	// Fields holds every key=value pair of a -progress block, including
 	// per-stream quantizers such as stream_0_0_q. It is nil for updates
 	// parsed from the stats line.

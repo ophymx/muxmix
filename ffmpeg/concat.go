@@ -10,6 +10,8 @@ import (
 	"strings"
 )
 
+// ConcatStream is a "stream" entry of a concat script: the codec and
+// metadata a file's stream is declared to have.
 type ConcatStream struct {
 	ID        string
 	Codec     string
@@ -23,12 +25,15 @@ func newConcatStream() *ConcatStream {
 	}
 }
 
+// ConcatChapter is a "chapter" entry of a concat script.
 type ConcatChapter struct {
 	ID    string
 	Start TimeSpec
 	End   TimeSpec
 }
 
+// ConcatFile is one "file" entry of a concat script with its optional
+// trimming, metadata and per-file demuxer options.
 type ConcatFile struct {
 	Path       string
 	Duration   *TimeSpec
@@ -48,10 +53,22 @@ func newConcatFile(filename string) *ConcatFile {
 	}
 }
 
+// Concat is an ffconcat script, the input format of the concat demuxer
+// (ffmpeg -f concat -safe 0 -i list.txt). Build one with NewConcat, add
+// Files, and feed String to ffmpeg; ParseConcat reads an existing script.
 type Concat struct {
-	Version  string
+	Version  string // "1.0" writes the "ffconcat version" header
 	Files    []*ConcatFile
 	Chapters []*ConcatChapter
+}
+
+// NewConcat returns a version 1.0 script listing the given paths.
+func NewConcat(paths ...string) *Concat {
+	c := &Concat{Version: "1.0"}
+	for _, p := range paths {
+		c.Files = append(c.Files, newConcatFile(p))
+	}
+	return c
 }
 
 func concatUnquote(filename string) string {
@@ -120,6 +137,7 @@ var requiresStream map[string]bool = map[string]bool{
 	"stream_extradata": true,
 }
 
+// ConcatParseError reports a malformed line in a concat script.
 type ConcatParseError struct {
 	Filename string
 	LineNum  int
@@ -160,6 +178,8 @@ var errHeaderNotFirst = errors.New("ffconcat header must be first directive")
 var errInvalidInOutRange = errors.New("inpoint must be less than or equal to outpoint")
 var errInvalidChapterRange = errors.New("chapter start must be less than or equal to chapter end")
 
+// ParseConcat reads an ffconcat script from disk. Syntax errors are
+// reported as *ConcatParseError with the line number.
 func ParseConcat(filename string) (concat *Concat, err error) {
 	var b []byte
 	if b, err = os.ReadFile(filename); err != nil {
@@ -297,6 +317,8 @@ func ParseConcat(filename string) (concat *Concat, err error) {
 	return
 }
 
+// String renders the script in the concat demuxer's syntax, quoting paths
+// as needed.
 func (concat *Concat) String() string {
 	buf := new(strings.Builder)
 	if concat.Version != "" {

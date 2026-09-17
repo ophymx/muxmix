@@ -47,7 +47,7 @@ func TestCommandFilters(t *testing.T) {
 		Input("in.mp4").
 		Output("out.mp4", ffmpeg.MapLabel("v"), ffmpeg.MapLabel("[0:a]"), ffmpeg.AudioFilter("volume=0.5"))
 	got := strings.Join(cmd.Args(), " ")
-	want := "-filter_complex [0:v]scale=h=720:w=1280[v] -i in.mp4 -map [v] -map [0:a] -af volume=0.5 out.mp4"
+	want := "-filter_complex [0:v]scale=w=1280:h=720[v] -i in.mp4 -map [v] -map [0:a] -af volume=0.5 out.mp4"
 	if got != want {
 		t.Errorf("Args()\n got %s\nwant %s", got, want)
 	}

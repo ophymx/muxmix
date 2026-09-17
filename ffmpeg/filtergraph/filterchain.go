@@ -9,7 +9,6 @@ import (
 // FilterChain represents a sequence of connected filters
 type FilterChain struct {
 	Filters []*Filter `json:"filters"`
-	parent  *FilterGraph
 	// pendingInputs holds labels given by Input before any filter exists;
 	// they are attached to the first filter added.
 	pendingInputs []string
@@ -89,27 +88,21 @@ func (fc *FilterChain) String() string {
 	return strings.Join(filterStrs, ",")
 }
 
-// Scale adds a scale filter to the chain
+// Scale adds scale=w=W:h=H. A negative value such as -2 keeps the aspect
+// ratio and rounds to a multiple of its magnitude.
 func (fc *FilterChain) Scale(width, height int) *FilterChain {
-	return fc.Add(NewFilter("scale").WithNamedArgs(map[string]string{
-		"w": strconv.Itoa(width),
-		"h": strconv.Itoa(height),
-	}))
+	return fc.Add(NewFilter("scale").WithArg("w", strconv.Itoa(width)).WithArg("h", strconv.Itoa(height)))
 }
 
 // ScaleExpression adds a scale filter with expression-based dimensions
+// such as "iw/2".
 func (fc *FilterChain) ScaleExpression(widthExpr, heightExpr string) *FilterChain {
-	return fc.Add(NewFilter("scale").WithNamedArgs(map[string]string{
-		"w": widthExpr,
-		"h": heightExpr,
-	}))
+	return fc.Add(NewFilter("scale").WithArg("w", widthExpr).WithArg("h", heightExpr))
 }
 
-// FPS adds an fps filter to the chain
+// FPS adds fps=RATE, printed exactly (23.976 stays 23.976).
 func (fc *FilterChain) FPS(fps float64) *FilterChain {
-	return fc.Add(NewFilter("fps").WithNamedArgs(map[string]string{
-		"fps": fmt.Sprintf("%.2f", fps),
-	}))
+	return fc.Add(NewFilter("fps").WithPositionalArgs(formatNumber(fps)))
 }
 
 // Format adds a format filter to the chain
@@ -117,48 +110,30 @@ func (fc *FilterChain) Format(pixelFormat string) *FilterChain {
 	return fc.Add(NewFilter("format").WithPositionalArgs(pixelFormat))
 }
 
-// Crop adds a crop filter to the chain
+// Crop adds crop=w=W:h=H:x=X:y=Y.
 func (fc *FilterChain) Crop(width, height, x, y int) *FilterChain {
-	return fc.Add(NewFilter("crop").WithNamedArgs(map[string]string{
-		"w": strconv.Itoa(width),
-		"h": strconv.Itoa(height),
-		"x": strconv.Itoa(x),
-		"y": strconv.Itoa(y),
-	}))
+	return fc.CropExpression(strconv.Itoa(width), strconv.Itoa(height), strconv.Itoa(x), strconv.Itoa(y))
 }
 
-// CropExpression adds a crop filter with expressions
+// CropExpression adds a crop filter with expressions such as "iw/4".
 func (fc *FilterChain) CropExpression(w, h, x, y string) *FilterChain {
-	return fc.Add(NewFilter("crop").WithNamedArgs(map[string]string{
-		"w": w,
-		"h": h,
-		"x": x,
-		"y": y,
-	}))
+	return fc.Add(NewFilter("crop").WithArg("w", w).WithArg("h", h).WithArg("x", x).WithArg("y", y))
 }
 
-// Fade adds a fade filter to the chain
+// Fade adds fade=type=T:start_frame=S:nb_frames=N.
 func (fc *FilterChain) Fade(fadeType string, startFrame, duration int) *FilterChain {
-	return fc.Add(NewFilter("fade").WithNamedArgs(map[string]string{
-		"type":        fadeType,
-		"start_frame": strconv.Itoa(startFrame),
-		"nb_frames":   strconv.Itoa(duration),
-	}))
+	return fc.Add(NewFilter("fade").WithArg("type", fadeType).WithArg("start_frame", strconv.Itoa(startFrame)).WithArg("nb_frames", strconv.Itoa(duration)))
 }
 
-// Volume adds a volume filter to the chain (for audio)
+// Volume adds volume=FACTOR for audio, printed exactly (0.8 stays 0.8).
 func (fc *FilterChain) Volume(volume float64) *FilterChain {
-	return fc.Add(NewFilter("volume").WithNamedArgs(map[string]string{
-		"volume": fmt.Sprintf("%.2f", volume),
-	}))
+	return fc.Add(NewFilter("volume").WithPositionalArgs(formatNumber(volume)))
 }
 
-// Overlay adds an overlay filter to the chain
+// Overlay adds overlay=x=X:y=Y; it takes two inputs, the base and the
+// overlay.
 func (fc *FilterChain) Overlay(x, y string) *FilterChain {
-	return fc.Add(NewFilter("overlay").WithNamedArgs(map[string]string{
-		"x": x,
-		"y": y,
-	}))
+	return fc.Add(NewFilter("overlay").WithArg("x", x).WithArg("y", y))
 }
 
 // Split adds a split filter to the chain
@@ -169,29 +144,9 @@ func (fc *FilterChain) Split(outputs int) *FilterChain {
 	return fc.Add(NewFilter("split").WithPositionalArgs(strconv.Itoa(outputs)))
 }
 
-// DrawText adds a drawtext filter to the chain
+// DrawText adds a drawtext filter; text is quoted as needed.
 func (fc *FilterChain) DrawText(text, fontfile string, fontSize int, x, y, color string) *FilterChain {
-	return fc.Add(NewFilter("drawtext").WithNamedArgs(map[string]string{
-		"text":      text,
-		"fontfile":  fontfile,
-		"fontsize":  strconv.Itoa(fontSize),
-		"x":         x,
-		"y":         y,
-		"fontcolor": color,
-	}))
-}
-
-// SetPixelFormat is an alias for Format for clarity
-func (fc *FilterChain) SetPixelFormat(format string) *FilterChain {
-	return fc.Format(format)
-}
-
-// SetFrameRate is an alias for FPS for clarity
-func (fc *FilterChain) SetFrameRate(fps float64) *FilterChain {
-	return fc.FPS(fps)
-}
-
-// Resize is an alias for Scale for clarity
-func (fc *FilterChain) Resize(width, height int) *FilterChain {
-	return fc.Scale(width, height)
+	return fc.Add(NewFilter("drawtext").
+		WithArg("text", text).WithArg("fontfile", fontfile).WithArg("fontsize", strconv.Itoa(fontSize)).
+		WithArg("x", x).WithArg("y", y).WithArg("fontcolor", color))
 }

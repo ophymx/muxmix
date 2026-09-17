@@ -11,6 +11,8 @@ import (
 
 // TwoPassOptions configures TwoPass.
 type TwoPassOptions struct {
+	// Runner executes both passes; nil uses DefaultRunner.
+	Runner Runner
 	// LogPrefix is the -passlogfile prefix; empty uses a temporary
 	// directory that is removed afterwards.
 	LogPrefix string
@@ -28,7 +30,8 @@ type TwoPassOptions struct {
 type TwoPassProgress struct {
 	Pass int // 1 or 2
 	Progress
-	// Fraction of the whole job done, 0-1, when Duration was given.
+	// Fraction of the whole job done, 0-1, or -1 when Duration was not
+	// given. Progress.Fraction and ETA refer to the current pass alone.
 	Fraction float64
 }
 
@@ -46,7 +49,8 @@ type TwoPassResult struct {
 //
 // Two-pass is worth it for bitrate-targeted encodes (a fixed file size or
 // a broadcast bit rate); constant-quality encodes gain nothing from it.
-func TwoPass(ctx context.Context, r Runner, cmd *Command, o TwoPassOptions) (*TwoPassResult, error) {
+func TwoPass(ctx context.Context, cmd *Command, o TwoPassOptions) (*TwoPassResult, error) {
+	r := o.Runner
 	if r == nil {
 		r = DefaultRunner
 	}
@@ -76,15 +80,14 @@ func TwoPass(ctx context.Context, r Runner, cmd *Command, o TwoPassOptions) (*Tw
 	res := &TwoPassResult{}
 	run := func(pass int, c *Command) (*Result, error) {
 		opts := append([]RunOption(nil), o.RunOptions...)
+		if o.Duration > 0 {
+			opts = append(opts, TotalDuration(o.Duration))
+		}
 		if o.OnProgress != nil {
 			opts = append(opts, OnProgress(func(p Progress) {
-				tp := TwoPassProgress{Pass: pass, Progress: p}
-				if o.Duration > 0 {
-					f := float64(p.Time) / float64(o.Duration)
-					if f > 1 {
-						f = 1
-					}
-					tp.Fraction = (float64(pass-1) + f) / 2
+				tp := TwoPassProgress{Pass: pass, Progress: p, Fraction: -1}
+				if p.Fraction >= 0 {
+					tp.Fraction = (float64(pass-1) + p.Fraction) / 2
 				}
 				o.OnProgress(tp)
 			}))

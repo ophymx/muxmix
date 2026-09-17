@@ -1,17 +1,25 @@
 // Package analyze runs ffmpeg's analysis filters and returns their results
 // as Go values instead of log lines.
 //
-//	silences, err := analyze.Silence(ctx, nil, "talk.wav", analyze.SilenceOptions{})
-//	stats, err := analyze.Loudnorm(ctx, nil, "talk.wav", analyze.LoudnormTargets{I: -16, TP: -1.5, LRA: 11})
+//	silences, err := analyze.Silence(ctx, "talk.wav", analyze.SilenceOptions{})
+//	stats, err := analyze.Loudnorm(ctx, "talk.wav", analyze.LoudnormTargets{I: -16, TP: -1.5, LRA: 11})
 //	second := stats.SecondPass(targets) // -af value for the normalising pass
 //
-// Every function has a matching Parse function that works on the raw ffmpeg
-// log, so results can also be extracted from a run made some other way. The
-// parsers are tested against logs captured from every FFmpeg release line.
+// The package-level functions use ffmpeg.DefaultRunner; an Analyzer binds
+// them to a Runner of your own. Every function has a matching Parse
+// function that works on the raw ffmpeg log, so results can also be
+// extracted from a run made some other way. The parsers are tested against
+// logs captured from every FFmpeg release line.
+//
+// A result ffmpeg did not report is NaN for values that can be negative
+// (loudness and levels in dB) and -1 otherwise. When the filter logged
+// nothing usable the error wraps ErrNoResult, which distinguishes a
+// changed log format from ffmpeg failing (an *ffmpeg.Error).
 package analyze
 
 import (
 	"context"
+	"errors"
 	"regexp"
 	"strconv"
 	"strings"
@@ -19,6 +27,26 @@ import (
 
 	"github.com/ophymx/muxmix/ffmpeg"
 )
+
+// ErrNoResult is wrapped when ffmpeg ran but the filter's output was not
+// found in the log.
+var ErrNoResult = errors.New("analyze: no result in ffmpeg log")
+
+// Analyzer runs the analysis filters through one Runner. The zero value
+// uses ffmpeg.DefaultRunner.
+type Analyzer struct {
+	Runner ffmpeg.Runner
+}
+
+// Default is the Analyzer behind the package-level functions.
+var Default = &Analyzer{}
+
+func (a *Analyzer) runner() ffmpeg.Runner {
+	if a != nil && a.Runner != nil {
+		return a.Runner
+	}
+	return ffmpeg.DefaultRunner
+}
 
 // Interval is a detected span of the input. End is zero and Open is true
 // when the condition still held at the end of the input.
@@ -39,9 +67,6 @@ func (i Interval) Duration() time.Duration {
 // run executes an analysis pass: the input filtered through one filter
 // into the null muxer at info log level, returning the log.
 func run(ctx context.Context, r ffmpeg.Runner, input string, video bool, filter string, inputOpts []ffmpeg.Opt) (string, error) {
-	if r == nil {
-		r = ffmpeg.DefaultRunner
-	}
 	out := []ffmpeg.Opt{ffmpeg.NullOutput()}
 	if video {
 		out = append(out, ffmpeg.NoAudio(), ffmpeg.NoSubtitles(), ffmpeg.NoData(), ffmpeg.VideoFilter(filter))

@@ -20,7 +20,12 @@ type BlackOptions struct {
 }
 
 // Black runs blackdetect and returns the black intervals.
-func Black(ctx context.Context, r ffmpeg.Runner, input string, o BlackOptions, inputOpts ...ffmpeg.Opt) ([]Interval, error) {
+func Black(ctx context.Context, input string, o BlackOptions, inputOpts ...ffmpeg.Opt) ([]Interval, error) {
+	return Default.Black(ctx, input, o, inputOpts...)
+}
+
+// Black is Black on this Analyzer's runner.
+func (a *Analyzer) Black(ctx context.Context, input string, o BlackOptions, inputOpts ...ffmpeg.Opt) ([]Interval, error) {
 	if o.MinDuration == 0 {
 		o.MinDuration = 2 * time.Second
 	}
@@ -31,7 +36,7 @@ func Black(ctx context.Context, r ffmpeg.Runner, input string, o BlackOptions, i
 		o.PixelThreshold = 0.10
 	}
 	filter := fmt.Sprintf("blackdetect=d=%s:pic_th=%s:pix_th=%s", formatFloat(o.MinDuration.Seconds()), formatFloat(o.PictureBlack), formatFloat(o.PixelThreshold))
-	log, err := run(ctx, r, input, true, filter, inputOpts)
+	log, err := run(ctx, a.runner(), input, true, filter, inputOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -52,7 +57,12 @@ type FreezeOptions struct {
 }
 
 // Freeze runs freezedetect and returns the frozen intervals.
-func Freeze(ctx context.Context, r ffmpeg.Runner, input string, o FreezeOptions, inputOpts ...ffmpeg.Opt) ([]Interval, error) {
+func Freeze(ctx context.Context, input string, o FreezeOptions, inputOpts ...ffmpeg.Opt) ([]Interval, error) {
+	return Default.Freeze(ctx, input, o, inputOpts...)
+}
+
+// Freeze is Freeze on this Analyzer's runner.
+func (a *Analyzer) Freeze(ctx context.Context, input string, o FreezeOptions, inputOpts ...ffmpeg.Opt) ([]Interval, error) {
 	if o.NoiseDB == 0 {
 		o.NoiseDB = -60
 	}
@@ -60,7 +70,7 @@ func Freeze(ctx context.Context, r ffmpeg.Runner, input string, o FreezeOptions,
 		o.MinDuration = 2 * time.Second
 	}
 	filter := fmt.Sprintf("freezedetect=n=%sdB:d=%s", formatFloat(o.NoiseDB), formatFloat(o.MinDuration.Seconds()))
-	log, err := run(ctx, r, input, true, filter, inputOpts)
+	log, err := run(ctx, a.runner(), input, true, filter, inputOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -85,11 +95,16 @@ type BlackFrame struct {
 
 // BlackFrames runs blackframe and returns every frame at least amount
 // percent black (default 98).
-func BlackFrames(ctx context.Context, r ffmpeg.Runner, input string, amount int, inputOpts ...ffmpeg.Opt) ([]BlackFrame, error) {
+func BlackFrames(ctx context.Context, input string, amount int, inputOpts ...ffmpeg.Opt) ([]BlackFrame, error) {
+	return Default.BlackFrames(ctx, input, amount, inputOpts...)
+}
+
+// BlackFrames is BlackFrames on this Analyzer's runner.
+func (a *Analyzer) BlackFrames(ctx context.Context, input string, amount int, inputOpts ...ffmpeg.Opt) ([]BlackFrame, error) {
 	if amount == 0 {
 		amount = 98
 	}
-	log, err := run(ctx, r, input, true, fmt.Sprintf("blackframe=amount=%d", amount), inputOpts)
+	log, err := run(ctx, a.runner(), input, true, fmt.Sprintf("blackframe=amount=%d", amount), inputOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -141,7 +156,12 @@ type CropOptions struct {
 }
 
 // CropDetect runs cropdetect over the input and returns the final region.
-func CropDetect(ctx context.Context, r ffmpeg.Runner, input string, o CropOptions, inputOpts ...ffmpeg.Opt) (*Crop, error) {
+func CropDetect(ctx context.Context, input string, o CropOptions, inputOpts ...ffmpeg.Opt) (*Crop, error) {
+	return Default.CropDetect(ctx, input, o, inputOpts...)
+}
+
+// CropDetect is CropDetect on this Analyzer's runner.
+func (a *Analyzer) CropDetect(ctx context.Context, input string, o CropOptions, inputOpts ...ffmpeg.Opt) (*Crop, error) {
 	if o.Limit == 0 {
 		o.Limit = 24
 	}
@@ -149,7 +169,7 @@ func CropDetect(ctx context.Context, r ffmpeg.Runner, input string, o CropOption
 		o.Round = 16
 	}
 	filter := fmt.Sprintf("cropdetect=limit=%d:round=%d:reset=0", o.Limit, o.Round)
-	log, err := run(ctx, r, input, true, filter, inputOpts)
+	log, err := run(ctx, a.runner(), input, true, filter, inputOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -162,7 +182,7 @@ var cropRe = regexp.MustCompile(`crop=(\d+):(\d+):(\d+):(\d+)`)
 func ParseCropDetect(log string) (*Crop, error) {
 	all := cropRe.FindAllStringSubmatch(log, -1)
 	if len(all) == 0 {
-		return nil, fmt.Errorf("analyze: no cropdetect output in log")
+		return nil, fmt.Errorf("%w: no cropdetect output in log", ErrNoResult)
 	}
 	m := all[len(all)-1]
 	return &Crop{
@@ -185,12 +205,17 @@ type SceneChange struct {
 // SceneChanges finds cuts using the select filter's scene score, which is
 // available on every ffmpeg version. threshold is 0-1; 0.3 to 0.5 suits
 // most content.
-func SceneChanges(ctx context.Context, r ffmpeg.Runner, input string, threshold float64, inputOpts ...ffmpeg.Opt) ([]SceneChange, error) {
+func SceneChanges(ctx context.Context, input string, threshold float64, inputOpts ...ffmpeg.Opt) ([]SceneChange, error) {
+	return Default.SceneChanges(ctx, input, threshold, inputOpts...)
+}
+
+// SceneChanges is SceneChanges on this Analyzer's runner.
+func (a *Analyzer) SceneChanges(ctx context.Context, input string, threshold float64, inputOpts ...ffmpeg.Opt) ([]SceneChange, error) {
 	if threshold == 0 {
 		threshold = 0.4
 	}
 	filter := fmt.Sprintf("select='gt(scene,%s)',metadata=print", formatFloat(threshold))
-	log, err := run(ctx, r, input, true, filter, inputOpts)
+	log, err := run(ctx, a.runner(), input, true, filter, inputOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -277,8 +302,13 @@ func (i *Interlace) Verdict() FieldOrder {
 }
 
 // IdetDetect runs the idet filter.
-func IdetDetect(ctx context.Context, r ffmpeg.Runner, input string, inputOpts ...ffmpeg.Opt) (*Interlace, error) {
-	log, err := run(ctx, r, input, true, "idet", inputOpts)
+func IdetDetect(ctx context.Context, input string, inputOpts ...ffmpeg.Opt) (*Interlace, error) {
+	return Default.IdetDetect(ctx, input, inputOpts...)
+}
+
+// IdetDetect is IdetDetect on this Analyzer's runner.
+func (a *Analyzer) IdetDetect(ctx context.Context, input string, inputOpts ...ffmpeg.Opt) (*Interlace, error) {
+	log, err := run(ctx, a.runner(), input, true, "idet", inputOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -318,7 +348,7 @@ func ParseIdet(log string) (*Interlace, error) {
 		}
 	}
 	if result == nil {
-		return nil, fmt.Errorf("analyze: no idet output in log")
+		return nil, fmt.Errorf("%w: no idet output in log", ErrNoResult)
 	}
 	return result, nil
 }

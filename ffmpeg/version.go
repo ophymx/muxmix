@@ -10,8 +10,15 @@ import (
 
 // VersionInfo is the parsed output of ffmpeg -version.
 type VersionInfo struct {
-	Version       string   // e.g. "7.1.5-0+deb13u1" or "n8.0"
-	Major, Minor  int      // numeric release line, 0/0 when the version is a git hash
+	Version      string // e.g. "7.1.5-0+deb13u1", "n8.0" or "N-118000-g1a2b3c4d"
+	Major, Minor int    // numeric release line; 0/0 for a git snapshot
+	// Patch is the third component, or -1 when the version has none.
+	Patch int
+	// Snapshot is true for a git build ("N-118000-g…"), which carries no
+	// release numbers; AtLeast treats it as newer than any release and
+	// LibraryAtLeast still works since library versions are always
+	// numeric.
+	Snapshot      bool
 	Built         string   // "built with gcc 14 (Debian 14.2.0-19)"
 	Configuration []string // each --flag from the configuration line
 	Libraries     []LibraryVersion
@@ -26,10 +33,31 @@ type LibraryVersion struct {
 
 // AtLeast reports whether the release line is major.minor or newer.
 func (v *VersionInfo) AtLeast(major, minor int) bool {
+	if v.Snapshot {
+		return true
+	}
 	if v.Major != major {
 		return v.Major > major
 	}
 	return v.Minor >= minor
+}
+
+// LibraryAtLeast compares a library's compiled version ("libavcodec" at
+// 61.19 for FFmpeg 7.1), which is the reliable gate on git snapshots.
+// Unknown libraries report false.
+func (v *VersionInfo) LibraryAtLeast(name string, major, minor int) bool {
+	lib := v.Library(name)
+	if lib == "" {
+		return false
+	}
+	var maj, min int
+	if _, err := fmt.Sscanf(lib, "%d.%d", &maj, &min); err != nil {
+		return false
+	}
+	if maj != major {
+		return maj > major
+	}
+	return min >= minor
 }
 
 // Enabled reports whether a configure flag such as "libx264" (--enable-libx264)
@@ -56,13 +84,14 @@ func (v *VersionInfo) Library(name string) string {
 
 var (
 	versionLine = regexp.MustCompile(`^ffmpeg version (\S+)`)
-	versionNums = regexp.MustCompile(`^[nN]?(\d+)\.(\d+)`)
+	versionNums = regexp.MustCompile(`^[nN]?(\d+)\.(\d+)(?:\.(\d+))?`)
+	snapshot    = regexp.MustCompile(`^N-\d+-g[0-9a-f]+`)
 	libraryLine = regexp.MustCompile(`^(lib\w+)\s+(\d+)\.\s*(\d+)\.\s*(\d+)\s*/\s*(\d+)\.\s*(\d+)\.\s*(\d+)`)
 )
 
 // ParseVersion parses the text of ffmpeg -version.
 func ParseVersion(output string) (*VersionInfo, error) {
-	v := &VersionInfo{}
+	v := &VersionInfo{Patch: -1}
 	for _, line := range strings.Split(output, "\n") {
 		line = strings.TrimSpace(line)
 		switch {
@@ -71,6 +100,11 @@ func ParseVersion(output string) (*VersionInfo, error) {
 			if m := versionNums.FindStringSubmatch(v.Version); m != nil {
 				v.Major, _ = strconv.Atoi(m[1])
 				v.Minor, _ = strconv.Atoi(m[2])
+				if m[3] != "" {
+					v.Patch, _ = strconv.Atoi(m[3])
+				}
+			} else if snapshot.MatchString(v.Version) {
+				v.Snapshot = true
 			}
 		case strings.HasPrefix(line, "built with "):
 			v.Built = strings.TrimPrefix(line, "built with ")

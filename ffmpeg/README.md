@@ -44,18 +44,30 @@ than the flag:
 Anything else goes through `Set(name, value)`, `Flag(name)` or
 `Raw(args...)`. `Command.String()` renders a shell-quoted line for logs.
 
-`filtergraph` builds `-filter_complex` graphs; `hwaccel.InputOpt` and
-`hwaccel.EncodeOpt` return the options for a hardware backend; `caps`
-reports which encoders, formats and filters the binary has and what options
-they take; `analyze` runs the analysis filters (loudnorm, silencedetect,
-cropdetect, ...) and returns typed results.
+`Validate` (which `Run` calls) rejects a command with no inputs or
+outputs, and options in a place ffmpeg does not accept them: a global-only
+option such as `FilterComplex` on an output, an input-only one such as
+`StreamLoop` on an output, or `Map` on an input. Its errors wrap
+`ErrInvalidCommand`.
+
+`filtergraph` builds `-filter_complex` graphs; a `hwaccel.Selection`
+renders the options for a hardware backend; `caps` reports which encoders,
+formats and filters the binary has and what options they take; `analyze`
+runs the analysis filters (loudnorm, silencedetect, cropdetect, ...) and
+returns typed results.
 
 ## Running
+
+A `Runner` is built once with `RunnerOption`s (`WithBinary`, `WithGrace`,
+`WithStdout`/`WithStderr` to tee every run's output, `WithEnv` to replace
+the environment); `DefaultRunner` serves the package-level functions. Each
+run takes `RunOption`s.
 
 `Run` applies sensible defaults unless `NoDefaultArgs` is given:
 `-hide_banner -nostdin`, `-loglevel error` unless the command sets one, and
 `-y` unless the command sets `-y` or `-n`. `RunArgs` runs a raw argument
-list.
+list. On failure the `Result` is still returned whenever ffmpeg started,
+alongside the `*Error`.
 
 Run options:
 
@@ -64,9 +76,11 @@ Run options:
   level. `ProgressInterval` sets the reporting period. Where a pipe cannot
   be inherited (Windows) the stats line on stderr is parsed instead;
   `NoProgressPipe` forces that.
+- `TotalDuration(d)`: the expected output length, so each `Progress`
+  carries `Fraction` (0 to 1) and `ETA`. Both are -1 without it.
 - `Stdin`, `Stdout`, `Stderr`, `Dir`, `Env`: process plumbing. Stdout is
   captured into the result unless redirected; use `Stdout` when an output
-  is `pipe:1`.
+  is `pipe:1`. `Env` appends to the runner's environment for this run.
 - `Report(path)`: capture ffmpeg's full log via `FFREPORT`.
 
 Cancelling the context sends SIGINT, which makes ffmpeg finish the file it
@@ -81,7 +95,7 @@ sharing a statistics file that is cleaned up afterwards. libx265 gets its
 combined fraction when the input duration is known:
 
 ```go
-res, err := ffmpeg.TwoPass(ctx, nil, cmd, ffmpeg.TwoPassOptions{
+res, err := ffmpeg.TwoPass(ctx, cmd, ffmpeg.TwoPassOptions{
     Duration:   info.Duration(),
     OnProgress: func(p ffmpeg.TwoPassProgress) { bar.Set(p.Fraction) },
 })
@@ -102,13 +116,21 @@ and which unwraps to the underlying `*exec.ExitError` or context error.
 ## Progress
 
 `Progress` has frame count, fps, quantizer, bit rate, bytes written, output
-time, dup/drop counts and speed. `Fields` holds the raw key=value pairs of a
-`-progress` block, including per-stream quantizers. The parsers are tested
+time, dup/drop counts, speed, and with `TotalDuration` the fraction done
+and an ETA. Anything ffmpeg did not report is -1. `Fields` holds the raw
+key=value pairs of a `-progress` block, including per-stream quantizers. The parsers are tested
 against the `-progress` and stats output recorded from every FFmpeg release
 line in `matrix/`.
 
 ## Version
 
-`Version` parses `ffmpeg -version`: release line, configure flags (so
-`Enabled("libx264")` answers whether an encoder was built in), and library
-versions.
+`Version` parses `ffmpeg -version`: release line (`AtLeast(7, 1)`),
+configure flags (so `Enabled("libx264")` answers whether an encoder was
+built in), and library versions. A git snapshot build (`N-118000-g…`) has
+no release numbers; it sets `Snapshot`, `AtLeast` treats it as newest, and
+`LibraryAtLeast("libavcodec", 61, 19)` remains an exact gate.
+
+## Concat scripts
+
+`NewConcat(paths...)` builds an ffconcat script for the concat demuxer
+(`ffmpeg.ConcatDemuxer()` on the input); `ParseConcat` reads one back.

@@ -7,6 +7,8 @@ import (
 	"time"
 )
 
+// TimeSpec is a duration that formats the way ffmpeg options take it
+// (HH:MM:SS.mmm) and parses every form ffmpeg accepts.
 type TimeSpec time.Duration
 
 // ParseTimeSpec parses an FFmpeg timestamp in HH:MM:SS[.ms], MM:SS[.ms], or S[.ms] format.

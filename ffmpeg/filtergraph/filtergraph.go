@@ -1,28 +1,24 @@
 // Package filtergraph builds and validates FFmpeg filtergraph strings.
 //
-// This package offers a type-safe, fluent API for building complex FFmpeg filter graphs
-// with validation, common filter builders, and optimization capabilities.
+// A graph is chains of filters; a chain is filters joined by commas, with
+// optional [labels] linking chains. The builders render the common filters
+// the way people write them by hand:
 //
-// Basic usage:
+//	g := filtergraph.NewFilterGraph()
+//	g.NewChain().Scale(1920, 1080).FPS(30).Format("yuv420p")
+//	fmt.Println(g) // scale=w=1920:h=1080,fps=30,format=yuv420p
 //
-// graph := filtergraph.NewFilterGraph()
-// chain := graph.NewChain()
-// chain.Scale(1920, 1080).FPS(30).Format("yuv420p")
-// fmt.Println(graph.String()) // scale=w=1920:h=1080,fps=fps=30.00,format=yuv420p
+// Labelled chains for -filter_complex:
 //
-// Advanced usage with multiple chains:
+//	g := filtergraph.NewFilterGraph()
+//	g.NewChain().Input("0:v").Scale(1920, 1080).Output("v")
+//	g.NewChain().Input("0:a").Volume(0.8).Output("a")
+//	fmt.Println(g) // [0:v]scale=w=1920:h=1080[v];[0:a]volume=0.8[a]
+//	cmd.GlobalOptions(ffmpeg.FilterComplex(g))
 //
-// graph := filtergraph.NewFilterGraph()
-//
-// // Video processing chain
-// video := graph.NewChain()
-// video.Input("0:v").Scale(1920, 1080).FPS(30).Output("v_out")
-//
-// // Audio processing chain
-// audio := graph.NewChain()
-// audio.Input("0:a").Volume(0.8).Output("a_out")
-//
-// fmt.Println(graph.String()) // [0:v]scale=w=1920:h=1080,fps=fps=30.00[v_out];[0:a]volume=volume=0.80[a_out]
+// Input labels that start with a digit are ffmpeg stream specifiers and
+// need no matching output. Any filter can be built with NewFilter and
+// WithArg for options the builders do not cover.
 package filtergraph
 
 import (
@@ -46,14 +42,12 @@ func NewFilterGraph() *FilterGraph {
 // NewChain creates a new filter chain and adds it to the graph
 func (fg *FilterGraph) NewChain() *FilterChain {
 	chain := NewFilterChain()
-	chain.parent = fg
 	fg.Chains = append(fg.Chains, chain)
 	return chain
 }
 
 // AddChain adds an existing chain to the graph
 func (fg *FilterGraph) AddChain(chain *FilterChain) *FilterGraph {
-	chain.parent = fg
 	fg.Chains = append(fg.Chains, chain)
 	return fg
 }

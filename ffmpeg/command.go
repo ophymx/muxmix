@@ -1,6 +1,7 @@
 package ffmpeg
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -37,8 +38,8 @@ type Output struct {
 }
 
 // NewCommand returns an empty Command. Add inputs and outputs with Input and
-// Output; global options with Set or the option constructors passed to
-// Global.
+// Output; global options with the option constructors passed to
+// GlobalOptions.
 func NewCommand() *Command { return &Command{} }
 
 // Input appends an input.
@@ -98,25 +99,96 @@ func (c *Command) String() string {
 	return strings.Join(parts, " ")
 }
 
-// Validate reports structural problems ffmpeg would reject.
+// ErrInvalidCommand is wrapped by every error Validate returns.
+var ErrInvalidCommand = errors.New("ffmpeg: invalid command")
+
+// globalOnly lists options ffmpeg accepts only as globals; putting them on
+// an input or output silently does the wrong thing or fails.
+var globalOnly = map[string]bool{
+	"filter_complex": true, "lavfi": true, "filter_complex_script": true, "filter_complex_threads": true,
+	"init_hw_device": true, "filter_hw_device": true,
+	"loglevel": true, "v": true, "report": true, "hide_banner": true, "nostdin": true,
+	"y": true, "n": true, "stats": true, "nostats": true, "stats_period": true, "progress": true,
+	"benchmark": true, "benchmark_all": true, "abort_on": true, "max_error_rate": true,
+	"vsync": true, "xerror": true, "copy_unknown": true, "ignore_unknown": true,
+}
+
+// inputOnly lists options that only make sense before -i.
+var inputOnly = map[string]bool{
+	"re": true, "readrate": true, "stream_loop": true, "itsoffset": true, "itsscale": true,
+	"hwaccel": true, "hwaccel_device": true, "hwaccel_output_format": true,
+	"accurate_seek": true, "seek_timestamp": true, "sseof": true, "thread_queue_size": true,
+	"find_stream_info": true, "dump_attachment": true, "discard": true,
+}
+
+// outputOnly lists options that only make sense on an output.
+var outputOnly = map[string]bool{
+	"map": true, "map_metadata": true, "map_chapters": true, "shortest": true,
+	"pass": true, "passlogfile": true, "fps_mode": true, "disposition": true,
+	"filter": true, "vf": true, "af": true, "filter_script": true,
+	"frames": true, "vframes": true, "aframes": true, "dframes": true,
+	"metadata": true, "timestamp": true, "target": true, "attach": true,
+	"movflags": true, "output_ts_offset": true,
+}
+
+// Validate reports structural problems ffmpeg would reject: no inputs or
+// outputs, missing URLs, and options in a place ffmpeg does not accept
+// them (a global-only option such as -filter_complex on an output, an
+// input-only one such as -re on an output, or -map on an input). Every
+// error wraps ErrInvalidCommand.
 func (c *Command) Validate() error {
+	fail := func(format string, a ...any) error {
+		return fmt.Errorf("%w: %s", ErrInvalidCommand, fmt.Sprintf(format, a...))
+	}
 	if len(c.Inputs) == 0 {
-		return fmt.Errorf("ffmpeg: command has no inputs")
+		return fail("no inputs")
 	}
 	if len(c.Outputs) == 0 {
-		return fmt.Errorf("ffmpeg: command has no outputs")
+		return fail("no outputs")
 	}
 	for i, in := range c.Inputs {
 		if in.URL == "" {
-			return fmt.Errorf("ffmpeg: input %d has no URL", i)
+			return fail("input %d has no URL", i)
+		}
+		for _, a := range in.Options {
+			name := baseName(a.Name)
+			if globalOnly[name] {
+				return fail("input %d: -%s is a global option", i, a.Name)
+			}
+			if outputOnly[name] {
+				return fail("input %d: -%s is an output option", i, a.Name)
+			}
 		}
 	}
 	for i, out := range c.Outputs {
 		if out.URL == "" {
-			return fmt.Errorf("ffmpeg: output %d has no URL", i)
+			return fail("output %d has no URL", i)
+		}
+		for _, a := range out.Options {
+			name := baseName(a.Name)
+			if globalOnly[name] {
+				return fail("output %d: -%s is a global option", i, a.Name)
+			}
+			if inputOnly[name] {
+				return fail("output %d: -%s is an input option", i, a.Name)
+			}
+		}
+	}
+	for _, a := range c.Global {
+		name := baseName(a.Name)
+		if inputOnly[name] || outputOnly[name] {
+			return fail("global: -%s is a per-file option", a.Name)
 		}
 	}
 	return nil
+}
+
+// baseName strips a stream specifier: "c:v:0" -> "c".
+func baseName(name string) string {
+	if i := strings.IndexByte(name, ':'); i >= 0 {
+		return name[:i]
+	}
+	return name
 }
 
 // ─── options ───────────────────────────────────────────────────────────────
@@ -355,17 +427,26 @@ func Copy(streamSpec string) Opt { return Codec(streamSpec, "copy") }
 // CopyAll stream-copies every mapped stream (-c copy).
 func CopyAll() Opt { return Codec("", "copy") }
 
-// NoVideo, NoAudio, NoSubtitles and NoData drop a stream type (-vn, -an, -sn, -dn).
-func NoVideo() Opt     { return Flag("vn") }
-func NoAudio() Opt     { return Flag("an") }
+// NoVideo drops every video stream (-vn).
+func NoVideo() Opt { return Flag("vn") }
+
+// NoAudio drops every audio stream (-an).
+func NoAudio() Opt { return Flag("an") }
+
+// NoSubtitles drops every subtitle stream (-sn).
 func NoSubtitles() Opt { return Flag("sn") }
-func NoData() Opt      { return Flag("dn") }
+
+// NoData drops every data stream (-dn).
+func NoData() Opt { return Flag("dn") }
 
 // BitRate sets -b[:spec], e.g. BitRate("v", "5M") or BitRate("a", "160k").
 func BitRate(streamSpec, rate string) Opt { return Set(spec("b", streamSpec), rate) }
 
-// MaxRate and BufSize set the VBV constraints (-maxrate, -bufsize).
+// MaxRate caps the bit rate for VBV-constrained encoding (-maxrate).
 func MaxRate(rate string) Opt { return Set("maxrate", rate) }
+
+// BufSize sets the VBV buffer size that MaxRate is enforced over
+// (-bufsize); twice the max rate is a common choice.
 func BufSize(size string) Opt { return Set("bufsize", size) }
 
 // MinRate sets -minrate.
@@ -380,11 +461,20 @@ func QScale(streamSpec string, q float64) Opt {
 	return Set(spec("q", streamSpec), strconv.FormatFloat(q, 'f', -1, 64))
 }
 
-// Preset, Tune, Profile and Level set the common encoder knobs.
-func Preset(name string) Opt              { return Set("preset", name) }
-func Tune(name string) Opt                { return Set("tune", name) }
+// Preset selects the encoder's speed/quality preset (-preset), e.g.
+// "veryfast" for x264 or "p4" for NVENC.
+func Preset(name string) Opt { return Set("preset", name) }
+
+// Tune selects the encoder's content tuning (-tune), e.g. "film",
+// "animation" or "zerolatency" for x264.
+func Tune(name string) Opt { return Set("tune", name) }
+
+// Profile sets the codec profile (-profile[:spec]), e.g. Profile("v",
+// "high") or Profile("a", "aac_low").
 func Profile(streamSpec, name string) Opt { return Set(spec("profile", streamSpec), name) }
-func Level(level string) Opt              { return Set("level", level) }
+
+// Level sets the codec level (-level), e.g. "4.1".
+func Level(level string) Opt { return Set("level", level) }
 
 // PixFmt sets -pix_fmt for the output video.
 func PixFmt(name string) Opt { return Set("pix_fmt", name) }
@@ -404,9 +494,6 @@ func Frames(streamSpec string, n int) Opt { return Set(spec("frames", streamSpec
 // GOP sets the keyframe interval (-g).
 func GOP(frames int) Opt { return Set("g", strconv.Itoa(frames)) }
 
-// KeyframeInterval is an alias for GOP.
-func KeyframeInterval(frames int) Opt { return GOP(frames) }
-
 // BFrames sets -bf.
 func BFrames(n int) Opt { return Set("bf", strconv.Itoa(n)) }
 
@@ -423,10 +510,13 @@ func ChannelLayout(layout string) Opt { return Set("channel_layout", layout) }
 // SampleFmt sets -sample_fmt.
 func SampleFmt(name string) Opt { return Set("sample_fmt", name) }
 
-// Pass and PassLogFile set up two-pass encoding (-pass, -passlogfile).
-func Pass(n int) Opt                   { return Set("pass", strconv.Itoa(n)) }
-func PassLogFile(prefix string) Opt    { return Set("passlogfile", prefix) }
-func EncoderOption(name, v string) Opt { return Set(name, v) }
+// Pass selects the pass of a two-pass encode (-pass 1 or 2); see TwoPass
+// for the orchestration.
+func Pass(n int) Opt { return Set("pass", strconv.Itoa(n)) }
+
+// PassLogFile sets the prefix of the statistics file two-pass encoders
+// share between passes (-passlogfile).
+func PassLogFile(prefix string) Opt { return Set("passlogfile", prefix) }
 
 // X264Params and X265Params pass encoder-private key=value strings.
 func X264Params(params string) Opt { return Set("x264-params", params) }
@@ -476,10 +566,7 @@ func Shortest() Opt { return Flag("shortest") }
 // Timecode sets the starting timecode (-timecode) for the output.
 func Timecode(tc string) Opt { return Set("timecode", tc) }
 
-// FormatOption passes any muxer or demuxer private option.
-func FormatOption(name, value string) Opt { return Set(name, value) }
-
-// StartTimestamp sets -output_ts_offset.
+// OutputTSOffset shifts every output timestamp by d (-output_ts_offset).
 func OutputTSOffset(d time.Duration) Opt { return Set("output_ts_offset", TimeSpec(d).String()) }
 
 // StreamID sets the container stream id for a mapped output stream
