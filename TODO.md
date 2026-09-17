@@ -2,12 +2,9 @@
 
 ## 1. ffprobe: helper layer over generated types (done)
 
-Replaced by the lenient value types (`Int`, `Seconds`, `Rat`, `Bool`, `Tags`) and the
-helpers in `ffprobe/helpers.go`. Remaining ffprobe follow-ups:
-
-- Typed accessors for common side data (Display Matrix, Mastering display metadata,
-  Content light level, Skip Samples) instead of reading `SideData.Extra` by key.
-- A `Sections` query (`ffprobe -sections`) so callers can feature-detect a binary at runtime.
+Replaced by the lenient value types (`Int`, `Seconds`, `Rat`, `Bool`, `Tags`), the helpers
+in `ffprobe/helpers.go`, the typed side data in `ffprobe/sidedata.go`, and
+`Prober.Sections` for runtime feature detection.
 
 ## 2. hwaccel: consolidated arg builder (done)
 
