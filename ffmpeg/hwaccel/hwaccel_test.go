@@ -109,7 +109,9 @@ esac
 }
 
 func TestBuildEncodeArgs(t *testing.T) {
-	args, err := BuildEncodeArgs(VAAPI, "h264", "", "scale=1280:-2")
+	// The VAAPI device only defaults on Linux; pass it explicitly so the
+	// test is platform-independent.
+	args, err := BuildEncodeArgs(VAAPI, "h264", "/dev/dri/renderD128", "scale=1280:-2")
 	if err != nil {
 		t.Fatalf("BuildEncodeArgs() error = %v", err)
 	}
