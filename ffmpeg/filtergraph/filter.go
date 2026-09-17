@@ -76,7 +76,16 @@ func (f *Filter) Validate() error {
 	}
 
 	labelPattern := regexp.MustCompile(`^[a-zA-Z0-9_:]+$`)
+	// Input stream specifiers may carry "?" (optional), "#"/"0x" (stream id)
+	// and metadata matches such as "0:m:language:eng".
+	specifierPattern := regexp.MustCompile(`^[0-9][a-zA-Z0-9_:?#.\-]*$`)
 	for _, label := range f.InputLabels {
+		if isStreamSpecifier(label) {
+			if !specifierPattern.MatchString(label) {
+				return fmt.Errorf("invalid input stream specifier: %s", label)
+			}
+			continue
+		}
 		if !labelPattern.MatchString(label) {
 			return fmt.Errorf("invalid input label: %s", label)
 		}

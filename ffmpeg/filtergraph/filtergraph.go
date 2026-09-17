@@ -27,7 +27,6 @@ package filtergraph
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
 )
 
@@ -94,11 +93,11 @@ func (fg *FilterGraph) Validate() error {
 		}
 	}
 
-	// Skip FFmpeg input stream specifiers like "0:v", "1:a", etc.
-	streamSpecifierPattern := regexp.MustCompile(`^[0-9]+:[vaspd]$`)
-
+	// ffmpeg treats any input label that starts with a digit as an input
+	// stream specifier ("0", "0:v", "0:a:1", "1:a?", "0:m:language:eng"),
+	// so those never need a matching output label.
 	for label := range labelInputs {
-		if streamSpecifierPattern.MatchString(label) {
+		if isStreamSpecifier(label) {
 			continue
 		}
 		if !labelOutputs[label] {
@@ -107,6 +106,12 @@ func (fg *FilterGraph) Validate() error {
 	}
 
 	return nil
+}
+
+// isStreamSpecifier reports whether a label names an ffmpeg input stream
+// rather than a filter output.
+func isStreamSpecifier(label string) bool {
+	return label != "" && label[0] >= '0' && label[0] <= '9'
 }
 
 // String returns the string representation of the filter graph

@@ -19,7 +19,9 @@ encoder instead; `Encoder: "libx265"` names one outright.
 
 ## One quality scale, one speed scale
 
-`Video.Quality` is the x264 CRF scale: 0 lossless, 23 default, 51 worst.
+`Video.Quality` is the x264 CRF scale: lower is better, 18 is visually near-lossless,
+23 is x264's default, 51 is worst. Zero means unset (each encoder's own default), so
+true lossless needs `ffmpeg.CRF(0)` in `Extra`.
 Each encoder gets its own knob and range:
 
 | Encoder            | Quality maps to                  | Speed maps to                    |

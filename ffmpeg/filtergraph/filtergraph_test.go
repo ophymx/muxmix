@@ -513,6 +513,18 @@ func TestFilterGraphValidation(t *testing.T) {
 			errorMsg:    "no corresponding output",
 		},
 		{
+			name: "stream specifiers need no output label",
+			graph: func() *FilterGraph {
+				g := NewFilterGraph()
+				g.NewChain().Input("0:v:0").Output("main")
+				g.NewChain().Input("1:a:0", "0:a?").Output("mix")
+				g.NewChain().Input("0:m:language:eng").Output("eng")
+				g.NewChain().Input("2").Output("all")
+				return g
+			}(),
+			shouldError: false,
+		},
+		{
 			name: "duplicate output labels",
 			graph: func() *FilterGraph {
 				g := NewFilterGraph()

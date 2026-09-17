@@ -278,15 +278,16 @@ func (s *Stream) CPBProperties() *CPBProperties {
 	return v
 }
 
-// IsHDR reports whether the stream carries HDR transfer characteristics
-// (PQ or HLG) or HDR mastering metadata.
-func (s *Stream) IsHDR() bool {
-	switch s.ColorTransfer {
-	case "smpte2084", "arib-std-b67":
-		return true
-	}
-	return s.MasteringDisplay() != nil || s.DolbyVision() != nil
-}
+// HDR10Plus reports whether the stream header carries HDR10+ dynamic
+// metadata.
+func (s *Stream) HDR10Plus() bool { return hasSideData(s.SideDataList, SideDataHDR10Plus) }
+
+// IsHDR reports whether the stream header signals HDR: a PQ or HLG
+// transfer, mastering display or light level metadata, Dolby Vision or
+// HDR10+. Many HEVC and AV1 files carry that metadata only as per-frame
+// SEI, which ffprobe's stream section does not show; use Prober.Color,
+// which falls back to the first frame, for a reliable answer.
+func (s *Stream) IsHDR() bool { return colorOf(s).IsHDR() }
 
 // SkipSamples returns the packet's encoder delay and padding, or nil.
 func (p *Packet) SkipSamples() *SkipSamples {
@@ -310,4 +311,20 @@ func (f *Frame) MasteringDisplay() *MasteringDisplay {
 func (f *Frame) ContentLightLevel() *ContentLightLevel {
 	v, _ := SideDataAs[ContentLightLevel](f.SideDataList, SideDataContentLightLevel)
 	return v
+}
+
+// HDR10Plus reports whether the frame carries HDR10+ dynamic metadata.
+func (f *Frame) HDR10Plus() bool { return hasSideData(f.SideDataList, SideDataFrameHDR10Plus) }
+
+// hasSideData reports whether the list has an entry of the given type.
+func hasSideData[E any, PE interface {
+	*E
+	SideDataEntry
+}](list []E, typeName string) bool {
+	for i := range list {
+		if strings.EqualFold(PE(&list[i]).Type(), typeName) {
+			return true
+		}
+	}
+	return false
 }

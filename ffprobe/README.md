@@ -43,6 +43,18 @@ components) keep their named fields and collect everything else in an
 `stream.Spherical()`, `packet.SkipSamples()`, and `stream.IsHDR()`.
 Anything else decodes with `SideDataAs[T]` or `DecodeSideData`.
 
+HDR mastering and light level metadata usually reach ffprobe only as
+per-frame SEI, so the stream section alone says nothing. `ffprobe.Color`
+reads the stream header and, when it has no HDR side data, decodes the first
+frame:
+
+```go
+c, err := ffprobe.Color(ctx, "movie.mkv")
+if err == nil && c.IsHDR() {
+    fmt.Println(c.Transfer, c.Mastering.MaxNits(), c.LightLevel.MaxContent.Int())
+}
+```
+
 `Prober.Sections` returns the section tree from `ffprobe -sections` for
 runtime feature detection, for example `root.Has("stream_groups")`.
 

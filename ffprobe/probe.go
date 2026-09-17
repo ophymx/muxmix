@@ -25,8 +25,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"strconv"
@@ -83,9 +85,21 @@ func (p *Prober) Binary() string { return p.binary }
 // available.
 func (p *Prober) ValidateInstall() error {
 	if _, err := exec.LookPath(p.binary); err != nil {
-		return ErrFFProbeNotFound
+		return fmt.Errorf("%w: %s: %v", ErrFFProbeNotFound, p.binary, err)
 	}
 	return nil
+}
+
+// startError classifies a failure to launch the binary. A missing
+// executable becomes ErrFFProbeNotFound so it is never confused with a
+// missing input file; anything else is reported as a start failure with the
+// original cause still wrapped.
+func (p *Prober) startError(err error) error {
+	var pe *fs.PathError
+	if errors.Is(err, exec.ErrNotFound) || (errors.As(err, &pe) && errors.Is(pe.Err, fs.ErrNotExist)) {
+		return fmt.Errorf("%w: %s: %v", ErrFFProbeNotFound, p.binary, err)
+	}
+	return fmt.Errorf("ffprobe: start %s: %w", p.binary, err)
 }
 
 // ValidateInstall checks the default Prober's binary.
@@ -305,6 +319,9 @@ func (p *Prober) Run(ctx context.Context, input string, opts ...Option) ([]byte,
 		return out, probeErr
 	}
 	if runErr != nil {
+		if cmd.ProcessState == nil {
+			return out, p.startError(runErr)
+		}
 		if ctx.Err() != nil {
 			return out, ctx.Err()
 		}
@@ -361,6 +378,9 @@ func (p *Prober) runBare(ctx context.Context, flags ...string) ([]byte, error) {
 	cmd.Stdout = &stdout
 	cmd.Stderr = p.stderrWriter(&stderr)
 	if err := cmd.Run(); err != nil {
+		if cmd.ProcessState == nil {
+			return nil, p.startError(err)
+		}
 		return nil, &ExitError{ExitCode: cmd.ProcessState.ExitCode(), Stderr: strings.TrimSpace(stderr.String()), Args: args, Cause: err}
 	}
 	return stdout.Bytes(), nil

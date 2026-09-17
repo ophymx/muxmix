@@ -16,8 +16,12 @@ type Video struct {
 	Encoder string       // explicit encoder name; overrides Codec and HW
 	HW      hwaccel.Kind // hardware backend to encode with, or None
 
-	// Quality on the CRF scale (0 lossless, 23 default, 51 worst). Zero
-	// leaves the encoder default. Ignored when Bitrate is set.
+	// Quality on the x264 CRF scale: lower is better, 18 is visually
+	// near-lossless, 23 is x264's default, 51 is worst. Zero means unset and
+	// leaves each encoder's own default. True lossless (crf 0) is not
+	// reachable through Quality; put ffmpeg.CRF(0) in Extra for that.
+	// Fractional values are rounded to one decimal. Ignored when Bitrate is
+	// set.
 	Quality float64
 	// Bitrate switches to bitrate-targeted rate control ("5M", "2500k").
 	Bitrate string
@@ -99,7 +103,7 @@ func (v Video) OptsFor(encoder string) []ffmpeg.Opt {
 			out = append(out, ffmpeg.BufSize(v.BufSize))
 		}
 	case v.Quality > 0:
-		q := v.Quality
+		q := math.Round(v.Quality*10) / 10
 		switch fam {
 		case famX264, famX265:
 			out = append(out, ffmpeg.CRF(q))

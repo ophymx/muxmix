@@ -86,7 +86,7 @@ func streamSection(ctx context.Context, p *Prober, input, key string, opts []Opt
 		return
 	}
 	if err := cmd.Start(); err != nil {
-		fail(&ExitError{Args: args, Cause: err})
+		fail(p.startError(err))
 		return
 	}
 
