@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ophymx/muxmix/ffmpeg"
+	"github.com/ophymx/muxmix/ffmpeg/caps"
 	"github.com/ophymx/muxmix/ffprobe"
 )
 
@@ -67,6 +68,17 @@ func requireTools(t *testing.T) {
 	}
 }
 
+// hasEncoder reports whether the local ffmpeg has an encoder; Homebrew's
+// build, for one, lacks libwebp.
+func hasEncoder(t *testing.T, name string) bool {
+	t.Helper()
+	set, err := caps.Detect(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return set.HasEncoder(name)
+}
+
 func probeImage(t *testing.T, path string) (w, h int, codec string) {
 	t.Helper()
 	res, err := ffprobe.Probe(context.Background(), path)
@@ -102,11 +114,15 @@ func TestThumbnailLive(t *testing.T) {
 	if w, _, codec := probeImage(t, filepath.Join(dir, "b.png")); w != 32 || codec != "png" {
 		t.Errorf("png = %d %s", w, codec)
 	}
-	if _, err := Thumbnail(ctx, media("basic.mp4"), filepath.Join(dir, "c.webp"), ThumbnailOptions{Width: 16, Height: 8}); err != nil {
+	fitOut := filepath.Join(dir, "c.png")
+	if hasEncoder(t, "libwebp") {
+		fitOut = filepath.Join(dir, "c.webp")
+	}
+	if _, err := Thumbnail(ctx, media("basic.mp4"), fitOut, ThumbnailOptions{Width: 16, Height: 8}); err != nil {
 		t.Fatal(err)
 	}
-	if w, h, _ := probeImage(t, filepath.Join(dir, "c.webp")); w != 8 || h != 8 {
-		t.Errorf("webp fit = %dx%d", w, h)
+	if w, h, _ := probeImage(t, fitOut); w != 8 || h != 8 {
+		t.Errorf("fit = %dx%d", w, h)
 	}
 	// Rotated input: display size is portrait, so a width bound applies to the short side.
 	if _, err := Thumbnail(ctx, media("rotated.mp4"), filepath.Join(dir, "r.jpg"), ThumbnailOptions{Width: 16}); err != nil {
@@ -171,7 +187,11 @@ func TestPreviewLive(t *testing.T) {
 	requireTools(t)
 	ctx := context.Background()
 	dir := t.TempDir()
-	for _, name := range []string{"p.mp4", "p.gif", "p.webp"} {
+	names := []string{"p.mp4", "p.gif"}
+	if hasEncoder(t, "libwebp_anim") {
+		names = append(names, "p.webp")
+	}
+	for _, name := range names {
 		out := filepath.Join(dir, name)
 		if err := Preview(ctx, media("basic.mp4"), out, PreviewOptions{Duration: 500 * time.Millisecond, Width: 16, Audio: true}); err != nil {
 			t.Fatalf("%s: %v", name, err)
