@@ -72,6 +72,23 @@ Run options:
 Cancelling the context sends SIGINT, which makes ffmpeg finish the file it
 is writing, and kills it only after the grace period (`WithGrace`).
 
+## Two-pass encoding
+
+`TwoPass` runs a bitrate-targeted command twice: first to the null muxer
+with `-pass 1` (audio and subtitles dropped), then as given with `-pass 2`,
+sharing a statistics file that is cleaned up afterwards. libx265 gets its
+`x265-params pass=N:stats=` form. One callback reports both passes with a
+combined fraction when the input duration is known:
+
+```go
+res, err := ffmpeg.TwoPass(ctx, nil, cmd, ffmpeg.TwoPassOptions{
+    Duration:   info.Duration(),
+    OnProgress: func(p ffmpeg.TwoPassProgress) { bar.Set(p.Fraction) },
+})
+```
+
+`PassCommand` derives either pass's command for inspection.
+
 ## Results and errors
 
 `Result` carries the exit code, timings, captured stdout and stderr, the
