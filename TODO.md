@@ -39,5 +39,12 @@ hardware devices and encoder option values against the installed build before ru
 
 ## 7. Release checklist
 
+- API usability review (done; see API-REVIEW.md) and godoc `Example` functions in every
+  package (done).
 - Run `matrix/test.sh` (all eight images) and CI green.
-- API review of exported identifiers, godoc `Example` functions, then tag v0.1.
+- Tag v0.1.
+
+## 8. Later
+
+- hwaccel: hardware decoding (`-hwaccel` with on-device scaling) behind a `Decode` flag on
+  `Policy`; the current pipeline uploads software-decoded frames.

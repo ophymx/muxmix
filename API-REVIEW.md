@@ -1,5 +1,8 @@
 # API usability review (2026-09-17)
 
+Status: every item below is addressed except where noted; hardware decoding
+remains the one deliberate deferral (see ffmpeg/hwaccel/README.md).
+
 Question: is this the API an integrator would reach for? Three reviewers each wrote
 5-7 realistic programs against the real API (all compiled, most run live against
 ffmpeg 7.1) and reported friction. Pre-v0.1, so breaking changes are on the table.
@@ -20,7 +23,7 @@ Scratch programs: scratchpad/review-{ffmpeg,ffprobe,tasks}/ (session-local).
   + `Fraction`. Proposal: `ffmpeg.TotalDuration(d) RunOption` filling
   `Progress.Fraction` and `Progress.ETA`; tasks plans inject it from `Info.Duration`.
 - DONE (documented: -1, NaN for dB). "Unknown" sentinels vary: -1 ints, NaN floats, `Open`, invalid `Rat`. Pick one rule.
-- DONE (ErrInvalidCommand, ErrNoResult; ffprobe in progress). Untyped errors in several places (`Command.Validate`, analyze "no JSON block",
+- DONE (ErrInvalidCommand, ErrNoResult, AVError). Untyped errors in several places (`Command.Validate`, analyze "no JSON block",
   ffprobe AVERROR codes unexported). Add sentinels so callers can `errors.Is/As`.
 
 ## HIGH
@@ -66,19 +69,19 @@ ffmpeg
 - DONE. `Run` returns non-nil `*Result` with the error, undocumented; `run` accepts nil ctx.
 
 ffprobe
-- `Result.Format` is `*Format` but `Streams` is `[]Stream` and helpers return
+- DONE. `Result.Format` is `*Format` but `Streams` is `[]Stream` and helpers return
   `[]*Stream`; nil deref when only `ShowStreams()` passed; `&res.Streams[i]` needed
   for pointer-receiver helpers. Generate `[]*Stream` and value `Format`.
-- No tag fallback for Matroska bitrate/frame count (`BPS`, `NUMBER_OF_FRAMES`),
+- DONE. No tag fallback for Matroska bitrate/frame count (`BPS`, `NUMBER_OF_FRAMES`),
   though `DurationOf()` already does this for `DURATION`. Add `Bitrate()`,
   `FrameCount()`.
-- Two rotation APIs: `Rotation()` raw signed, `DisplayMatrix().Degrees()` normalised;
+- DONE (also fixed a sign bug in Degrees). Two rotation APIs: `Rotation()` raw signed, `DisplayMatrix().Degrees()` normalised;
   neither reads legacy `rotate` tag. Collapse to one normalised `Rotation()`.
-- `DurationOf()`/`StartOf()` naming reads like it takes an argument; rename the
+- DONE (`Secs` suffix on raw fields). `DurationOf()`/`StartOf()` naming reads like it takes an argument; rename the
   generated seconds fields so `Duration()`/`StartTime()` are free.
-- AVERROR codes unexported; `Is` covers 5 of 7; ETIMEDOUT (-110) and EOF not
+- DONE (`AVError`). AVERROR codes unexported; `Is` covers 5 of 7; ETIMEDOUT (-110) and EOF not
   matchable. Export `AVError` consts, map errno generically.
-- Version tolerance is documented per field but not queryable: add cached
+- DONE. Version tolerance is documented per field but not queryable: add cached
   `Prober.Version(ctx)` + `VersionInfo.AtLeast`; mention `Sections()` in doc.go.
 
 tasks / encode / caps / hwaccel
@@ -100,7 +103,7 @@ tasks / encode / caps / hwaccel
 
 ## LOW
 
-- DONE (ffmpeg/filtergraph/encode aliases removed; ffprobe in progress). Alias bloat: `EncoderOption`/`FormatOption` = `Set`; `KeyframeInterval`;
+- DONE (aliases removed in ffmpeg, filtergraph, encode and ffprobe). Alias bloat: `EncoderOption`/`FormatOption` = `Set`; `KeyframeInterval`;
   filtergraph `Resize`/`SetFrameRate`/`SetPixelFormat`; `encode.PNG/WebP/GIF` vs
   `PNGImage/WebPImage/AnimatedGIF`; ffprobe `ErrUnsupportedFile`, `Prober.Exists`,
   `Result.Error`.
@@ -116,11 +119,11 @@ tasks / encode / caps / hwaccel
   `TimeSpec`, all `Concat*` types, `ParseConcat`; `OutputTSOffset` and `NewCommand`
   docs reference wrong names; ffprobe `MinNits` shares `MaxNits` comment.
 - DONE. `Concat` needs `Version: "1.0"` by hand; add `NewConcat(files ...string)`.
-- `FrameRate()` returns 90000 fps for attached pictures.
-- `Packet.IsKeyframe`/`IsDiscard` positional on the flags string; use ContainsRune.
-- `Disposition` is a pointer with only three accessors; make it a value or generate
+- DONE. `FrameRate()` returns 90000 fps for attached pictures.
+- DONE. `Packet.IsKeyframe`/`IsDiscard` positional on the flags string; use ContainsRune.
+- DONE (value type). `Disposition` is a pointer with only three accessors; make it a value or generate
   `Has(flag)`.
-- ffprobe `Timeout(d)` duplicates context and loses the "ffprobe:" prefix.
+- DONE (`WithTimeout` + wrapped error). ffprobe `Timeout(d)` duplicates context and loses the "ffprobe:" prefix.
 - DONE (documented). `SilenceOptions{NoiseDB:0}` means default; 0 dB is legal. Document or use pointer.
 
 ## Keep
