@@ -35,3 +35,23 @@ The parsers (`ParseCodecs`, `ParseFormats`, `ParseFilters`,
 release line in `matrix/`. Column changes between releases are handled:
 the device column in `-formats` (7.0+), the command-support column dropped
 from `-filters` (8.1), the bit-depth column in `-pix_fmts` (7.0+).
+
+## Checking a command before running it
+
+`Check` validates an `ffmpeg.Command` against a `Set` and reports every
+problem at once, with what the build does have:
+
+```go
+if err := caps.Check(ctx, set, ffmpeg.DefaultRunner, cmd); err != nil {
+    // ffmpeg command has 2 problems:
+    //   output 0: -c:v h264: no such encoder (available: libx264, h264_nvenc, h264_vaapi)
+    //   output 0: -crf -5: below minimum -1 for libx264
+}
+```
+
+It checks encoders, decoders, muxers, demuxers, every filter named in
+`-vf`, `-af` and `-filter_complex`, pixel formats (including what the
+chosen encoder accepts), hardware device types, and encoder option values
+against their AVOption type, range and named constants. Option tables are
+fetched through the runner on demand; a `Checker` caches them, and
+`AddHelp` preloads them for use without a runner.

@@ -40,23 +40,26 @@ type SystemSupport struct {
 	Probes map[Kind][]ProbeResult
 }
 
+// NormalizeKind maps a name from ffmpeg output or user input to a
+// registered Kind: case-insensitive, with aliases (for example "nvenc" for
+// cuda). Unknown names yield None.
 func NormalizeKind(raw string) Kind {
-	switch strings.ToLower(strings.TrimSpace(raw)) {
-	case "", "hardware acceleration methods:", "hardware acceleration:", "encoders:":
+	name := strings.ToLower(strings.TrimSpace(raw))
+	switch name {
+	case "":
 		return None
 	case "auto":
 		return Auto
-	case "vaapi":
-		return VAAPI
-	case "cuda", "nvenc":
-		return CUDA
-	case "qsv":
-		return QSV
-	case "videotoolbox":
-		return VideoToolbox
-	default:
-		return None
 	}
+	registry.mu.RLock()
+	defer registry.mu.RUnlock()
+	if kind, ok := registry.aliases[name]; ok {
+		return kind
+	}
+	if _, ok := registry.backends[Kind(name)]; ok {
+		return Kind(name)
+	}
+	return None
 }
 
 func (s Support) Has(kind Kind) bool {

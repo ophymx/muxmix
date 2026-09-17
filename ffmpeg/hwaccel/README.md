@@ -175,3 +175,19 @@ The package is meant to be the narrow place where hardware acceleration policy l
 - verify what the current system can actually use
 - select a usable backend for a target codec
 - build the backend-specific FFmpeg arguments consistently
+Backends And Caching
+--------------------
+
+Each backend is a `Backend` value registered with `Register`. The built-in
+VAAPI, CUDA, QSV and VideoToolbox backends live in `builtin.go`; an external
+package can register its own kind, probe command and argument builders
+without changes here, and `RegisterAlias` maps alternative names (for
+example `nvenc` to `cuda`) for `NormalizeKind`.
+
+`hwaccel.InputOpt` and `hwaccel.EncodeOpt` return `ffmpeg.Opt` values for
+use with `ffmpeg.Command`.
+
+`DetectSystem` probes hardware and takes noticeable time. `DetectSystemCached`
+stores the result as JSON keyed by the ffmpeg version string and reuses it
+until the binary changes; `SaveCache` and `LoadCache` expose the file
+format directly.

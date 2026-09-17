@@ -3,9 +3,6 @@ package hwaccel
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
-	"runtime"
 	"sort"
 	"strings"
 
@@ -75,92 +72,6 @@ func Probe(ctx context.Context, runner baseffmpeg.Runner, kind Kind, device stri
 	return probe
 }
 
-func DefaultProbeArgs(kind Kind, device string) ([]string, error) {
-	kind = NormalizeKind(string(kind))
-	base := []string{"-hide_banner", "-loglevel", "error"}
-	switch kind {
-	case None, Auto:
-		return nil, fmt.Errorf("cannot probe hwaccel %q", kind)
-	case VAAPI:
-		if device == "" {
-			return nil, fmt.Errorf("vaapi probe device is required")
-		}
-		return append(base,
-			"-init_hw_device", fmt.Sprintf("vaapi=probe:%s", device),
-			"-f", "lavfi",
-			"-i", "color=s=16x16:d=0.1",
-			"-vf", "format=nv12,hwupload",
-			"-frames:v", "1",
-			"-f", "null", "-",
-		), nil
-	case CUDA:
-		deviceSpec := "cuda=probe"
-		if device != "" {
-			deviceSpec += ":" + device
-		}
-		return append(base,
-			"-init_hw_device", deviceSpec,
-			"-f", "lavfi",
-			"-i", "color=s=16x16:d=0.1",
-			"-vf", "hwupload_cuda",
-			"-frames:v", "1",
-			"-f", "null", "-",
-		), nil
-	case QSV:
-		deviceSpec := "qsv=probe"
-		if device != "" {
-			deviceSpec += ":" + device
-		}
-		return append(base,
-			"-init_hw_device", deviceSpec,
-			"-f", "lavfi",
-			"-i", "color=s=16x16:d=0.1",
-			"-frames:v", "1",
-			"-f", "null", "-",
-		), nil
-	case VideoToolbox:
-		return append(base,
-			"-init_hw_device", "videotoolbox=probe",
-			"-f", "lavfi",
-			"-i", "color=s=16x16:d=0.1",
-			"-frames:v", "1",
-			"-f", "null", "-",
-		), nil
-	default:
-		return nil, fmt.Errorf("unsupported hwaccel %q", kind)
-	}
-}
-
-func DefaultDevices(kind Kind) []string {
-	kind = NormalizeKind(string(kind))
-	switch kind {
-	case VAAPI, QSV:
-		if runtime.GOOS != "linux" {
-			return nil
-		}
-		matches, err := filepath.Glob("/dev/dri/renderD*")
-		if err != nil {
-			return nil
-		}
-		if len(matches) == 0 {
-			defaultDevice := defaultVAAPIDevice()
-			if defaultDevice == "" {
-				return nil
-			}
-			if _, err := os.Stat(defaultDevice); err == nil {
-				return []string{defaultDevice}
-			}
-			return nil
-		}
-		sort.Strings(matches)
-		return matches
-	case CUDA, VideoToolbox:
-		return []string{""}
-	default:
-		return nil
-	}
-}
-
 func formatProbeError(err error, result *baseffmpeg.Result) string {
 	if result != nil {
 		stderr := strings.TrimSpace(string(result.Stderr))
@@ -180,7 +91,7 @@ func formatProbeError(err error, result *baseffmpeg.Result) string {
 
 func probeKinds(kinds []Kind) []Kind {
 	if len(kinds) == 0 {
-		return []Kind{VAAPI, CUDA, QSV, VideoToolbox}
+		return Kinds()
 	}
 	seen := make(map[Kind]bool, len(kinds))
 	resolved := make([]Kind, 0, len(kinds))
@@ -201,16 +112,7 @@ func probeDevices(kind Kind, configured map[Kind][]string) []string {
 			return append([]string(nil), devices...)
 		}
 	}
-	devices := DefaultDevices(kind)
-	if len(devices) == 0 {
-		switch kind {
-		case CUDA, VideoToolbox:
-			return []string{""}
-		default:
-			return nil
-		}
-	}
-	return devices
+	return DefaultDevices(kind)
 }
 
 func SystemSortProbes(probes []ProbeResult) {
@@ -224,7 +126,7 @@ func SystemSortProbes(probes []ProbeResult) {
 
 func selectOrder(preferred []Kind) []Kind {
 	if len(preferred) == 0 {
-		return []Kind{VAAPI, CUDA, QSV, VideoToolbox}
+		return Kinds()
 	}
 	seen := make(map[Kind]bool, len(preferred))
 	order := make([]Kind, 0, len(preferred))
@@ -237,11 +139,4 @@ func selectOrder(preferred []Kind) []Kind {
 		order = append(order, kind)
 	}
 	return order
-}
-
-func defaultVAAPIDevice() string {
-	if runtime.GOOS == "linux" {
-		return "/dev/dri/renderD128"
-	}
-	return ""
 }
