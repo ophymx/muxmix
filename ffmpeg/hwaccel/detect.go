@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	baseffmpeg "github.com/ophymx/muxmix/ffmpeg"
+	"github.com/ophymx/muxmix/ffmpeg/caps"
 )
 
 func Detect(ctx context.Context, runner baseffmpeg.Runner) (Support, error) {
@@ -40,8 +41,8 @@ func ParseDetection(hwaccelsOutput, encodersOutput string) Support {
 
 func ParseHardwareAccelerators(output string) []Kind {
 	seen := make(map[Kind]bool)
-	for line := range strings.SplitSeq(output, "\n") {
-		kind := NormalizeKind(strings.TrimSpace(line))
+	for _, name := range caps.ParseList(output) {
+		kind := NormalizeKind(name)
 		if kind == None || kind == Auto {
 			continue
 		}
@@ -57,15 +58,10 @@ func ParseHardwareAccelerators(output string) []Kind {
 
 func ParseVideoEncoders(output string) map[string]bool {
 	encoders := make(map[string]bool)
-	for line := range strings.SplitSeq(output, "\n") {
-		fields := strings.Fields(line)
-		if len(fields) < 2 {
-			continue
+	for _, c := range caps.ParseCodecs(output) {
+		if c.Type == caps.Video {
+			encoders[strings.ToLower(c.Name)] = true
 		}
-		if !strings.Contains(fields[0], "V") {
-			continue
-		}
-		encoders[strings.ToLower(fields[1])] = true
 	}
 	return encoders
 }

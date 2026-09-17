@@ -15,30 +15,8 @@ import (
 	"github.com/ophymx/muxmix/ffprobe"
 )
 
-func writeFakeFFmpeg(t *testing.T, body string) string {
-	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Skip("shell-script test")
-	}
-	path := filepath.Join(t.TempDir(), "fake-ffmpeg.sh")
-	script := "#!/usr/bin/env bash\nset -euo pipefail\n" + body + "\n"
-	if err := os.WriteFile(path, []byte(script), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	return path
-}
-
 func TestRunProgressPipe(t *testing.T) {
-	fake := writeFakeFFmpeg(t, `
-echo "fake stdout"
-echo "some log line" >&2
-# -progress pipe:3 must be present and fd 3 open
-for a in "$@"; do [ "$a" = "pipe:3" ] && found=1; done
-[ "${found:-0}" = 1 ] || { echo "no progress pipe" >&2; exit 3; }
-printf 'frame=1\nout_time_us=40000\nprogress=continue\n' >&3
-printf 'frame=100\nout_time_us=4000000\ntotal_size=204800\nprogress=end\n' >&3
-`)
-	r := ffmpeg.New(ffmpeg.WithBinary(fake))
+	r := fakeRunner(t, "progress")
 	var mu sync.Mutex
 	var updates []ffmpeg.Progress
 	cmd := ffmpeg.NewCommand().Input("input.mp4").Output("output.mp4")
@@ -53,21 +31,24 @@ printf 'frame=100\nout_time_us=4000000\ntotal_size=204800\nprogress=end\n' >&3
 	if res.ExitCode != 0 || string(res.Stdout) != "fake stdout\n" || !strings.Contains(string(res.Stderr), "some log line") {
 		t.Errorf("result = %+v", res)
 	}
-	if len(updates) != 2 || !res.Progress.Done || res.Progress.Frame != 100 || res.Progress.Time != 4*time.Second || res.Progress.Size != 204800 {
+	if len(updates) != 2 || !res.Progress.Done || res.Progress.Frame != 100 || res.Progress.Time != 4*time.Second {
 		t.Errorf("updates=%d last=%+v", len(updates), res.Progress)
 	}
-	want := []string{"-hide_banner", "-nostdin", "-loglevel", "error", "-y", "-progress", "pipe:3", "-i", "input.mp4", "output.mp4"}
+	transport := []string{"-progress", "pipe:3"}
+	if runtime.GOOS == "windows" {
+		transport = []string{"-stats"} // no inheritable pipes; stderr stats line instead
+	} else if res.Progress.Size != 204800 {
+		t.Errorf("size via pipe = %d", res.Progress.Size)
+	}
+	want := append([]string{"-hide_banner", "-nostdin", "-loglevel", "error", "-y"}, transport...)
+	want = append(want, "-i", "input.mp4", "output.mp4")
 	if strings.Join(res.Args, " ") != strings.Join(want, " ") {
 		t.Errorf("args = %v", res.Args)
 	}
 }
 
 func TestRunStatsFallback(t *testing.T) {
-	fake := writeFakeFFmpeg(t, `
-printf 'frame=    1 fps=0.0 q=-0.0 size=N/A time=00:00:00.04 bitrate=N/A speed=N/A\r' >&2
-printf 'frame=  100 fps=25.0 q=20.0 Lsize=    200kB time=00:00:04.00 bitrate= 409.6kbits/s speed=1.00x\r' >&2
-`)
-	r := ffmpeg.New(ffmpeg.WithBinary(fake))
+	r := fakeRunner(t, "stats")
 	var n int
 	res, err := r.RunArgs(context.Background(), []string{"-i", "in", "out"},
 		ffmpeg.OnProgress(func(p ffmpeg.Progress) { n++ }), ffmpeg.NoProgressPipe())
@@ -83,13 +64,7 @@ printf 'frame=  100 fps=25.0 q=20.0 Lsize=    200kB time=00:00:04.00 bitrate= 40
 }
 
 func TestRunFailure(t *testing.T) {
-	fake := writeFakeFFmpeg(t, `
-echo "[in#0] Error opening input: No such file or directory" >&2
-echo "Error opening input file missing.mp4." >&2
-echo "Conversion failed!" >&2
-exit 254
-`)
-	r := ffmpeg.New(ffmpeg.WithBinary(fake))
+	r := fakeRunner(t, "fail")
 	res, err := r.Run(context.Background(), ffmpeg.NewCommand().Input("missing.mp4").Output("x.mp4"))
 	if err == nil {
 		t.Fatal("expected error")
@@ -108,12 +83,7 @@ exit 254
 }
 
 func TestRunReport(t *testing.T) {
-	fake := writeFakeFFmpeg(t, `
-case "$FFREPORT" in file=*) ;; *) echo "no FFREPORT: $FFREPORT" >&2; exit 2;; esac
-path=${FFREPORT#file=}; path=${path%%:level=*}; path=${path//\\:/:}
-echo "report body" > "$path"
-`)
-	r := ffmpeg.New(ffmpeg.WithBinary(fake))
+	r := fakeRunner(t, "report")
 	res, err := r.RunArgs(context.Background(), []string{"-i", "in", "out"}, ffmpeg.Report(""))
 	if err != nil {
 		t.Fatal(err)

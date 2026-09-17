@@ -45,7 +45,9 @@ Anything else goes through `Set(name, value)`, `Flag(name)` or
 `Raw(args...)`. `Command.String()` renders a shell-quoted line for logs.
 
 `filtergraph` builds `-filter_complex` graphs; `hwaccel.InputOpt` and
-`hwaccel.EncodeOpt` return the options for a hardware backend.
+`hwaccel.EncodeOpt` return the options for a hardware backend; `caps`
+reports which encoders, formats and filters the binary has and what options
+they take.
 
 ## Running
 

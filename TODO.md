@@ -18,9 +18,10 @@ raw argument lists.
 ## 3. ffmpeg: higher-level codec builder (in progress)
 
 `ffmpeg.Command` now models inputs, outputs, maps and options, and the option constructors
-cover the common encoder knobs. What is still missing is the codec-specific layer above it:
-per-encoder presets and rate-control profiles, two-pass orchestration, and validation of
-option values against what the installed build supports.
+cover the common encoder knobs; `ffmpeg/caps` reports what the installed build supports and
+the option tables of each component. What is still missing is the codec-specific layer above
+them: per-encoder presets and rate-control profiles, two-pass orchestration, and a
+`Command.Check(set)` that validates encoders, formats and option values against `caps`.
 
 Transcoder commands outside of this repository are currently being used to experiment with what
 codec-specific builder APIs should look like before anything is added here. Once patterns

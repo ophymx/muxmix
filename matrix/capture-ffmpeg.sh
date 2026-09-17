@@ -1,6 +1,7 @@
 #!/bin/sh
-# capture-ffmpeg.sh — record ffmpeg's version, its -progress stream and stats
-# line from one encode, and how it reports a missing input.
+# capture-ffmpeg.sh — record ffmpeg's version and capability listings, its
+# -progress stream and stats line from one encode, and how it reports a
+# missing input.
 #
 # usage: matrix/capture-ffmpeg.sh <out-root>
 # Output lands in <out-root>/<ffmpeg-version>/.
@@ -15,6 +16,15 @@ tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
 ffmpeg -version > "$out/version.txt" 2>&1 || true
+for l in encoders decoders muxers demuxers filters pix_fmts sample_fmts hwaccels bsfs protocols; do
+  ffmpeg -hide_banner -$l > "$out/$l.txt" 2>/dev/null || true
+done
+ffmpeg -hide_banner -h encoder=libx264 > "$out/help-encoder-libx264.txt" 2>/dev/null || true
+ffmpeg -hide_banner -h decoder=h264 > "$out/help-decoder-h264.txt" 2>/dev/null || true
+ffmpeg -hide_banner -h muxer=mp4 > "$out/help-muxer-mp4.txt" 2>/dev/null || true
+ffmpeg -hide_banner -h demuxer=mov > "$out/help-demuxer-mov.txt" 2>/dev/null || true
+ffmpeg -hide_banner -h filter=scale > "$out/help-filter-scale.txt" 2>/dev/null || true
+ffmpeg -hide_banner -h bsf=h264_mp4toannexb > "$out/help-bsf-h264_mp4toannexb.txt" 2>/dev/null || true
 # Progress on a pipe (fd 3) plus the stats line on stderr, same run.
 ffmpeg -hide_banner -loglevel info -stats -stats_period 0.05 -y -nostdin \
   -f lavfi -i testsrc2=size=320x240:rate=25:duration=4 -f lavfi -i sine=duration=4 \
