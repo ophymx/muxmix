@@ -17,7 +17,7 @@ func TestColorFromCaptures(t *testing.T) {
 				t.Fatalf("stream section should carry no HDR metadata: %+v", c)
 			}
 			frames := decodeCapture(t, filepath.Join(dir, "hdr_mp4.frames.json"))
-			c.mergeFrame(&frames.Frames[0])
+			c.mergeFrame(frames.Frames[0])
 			if !c.FromFrame || !c.IsHDR() {
 				t.Fatalf("frame merge did not yield HDR: %+v", c)
 			}

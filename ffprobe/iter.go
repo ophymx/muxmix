@@ -60,6 +60,21 @@ func (p *Prober) PacketsAndFrames(ctx context.Context, input string, opts ...Opt
 	}
 }
 
+// Frames streams decoded frames using the default Prober.
+func Frames(ctx context.Context, input string, opts ...Option) iter.Seq2[*Frame, error] {
+	return Default.Frames(ctx, input, opts...)
+}
+
+// Packets streams packets using the default Prober.
+func Packets(ctx context.Context, input string, opts ...Option) iter.Seq2[*Packet, error] {
+	return Default.Packets(ctx, input, opts...)
+}
+
+// PacketsAndFrames streams the interleaved listing using the default Prober.
+func PacketsAndFrames(ctx context.Context, input string, opts ...Option) iter.Seq2[*PacketOrFrame, error] {
+	return Default.PacketsAndFrames(ctx, input, opts...)
+}
+
 // streamSection runs ffprobe and walks its top-level JSON object. Items of
 // the array named key are handed to item; every other top-level member is
 // decoded so an "error" section can be surfaced.
@@ -69,15 +84,10 @@ func streamSection(ctx context.Context, p *Prober, input, key string, opts []Opt
 	c.apply(opts)
 	args := p.buildArgs(&c, input)
 
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	if c.timeout > 0 {
-		var tcancel context.CancelFunc
-		ctx, tcancel = context.WithTimeout(ctx, c.timeout)
-		defer tcancel()
-	}
+	run := p.newRun(ctx, &c, input)
+	defer run.cancel()
 
-	cmd := p.command(ctx, args, &c)
+	cmd := p.command(run.ctx, args, &c)
 	var stderr bytes.Buffer
 	cmd.Stderr = p.stderrWriter(&stderr)
 	stdout, err := cmd.StdoutPipe()
@@ -86,6 +96,10 @@ func streamSection(ctx context.Context, p *Prober, input, key string, opts []Opt
 		return
 	}
 	if err := cmd.Start(); err != nil {
+		if ctxErr := run.err(); ctxErr != nil {
+			fail(ctxErr)
+			return
+		}
 		fail(p.startError(err))
 		return
 	}
@@ -94,14 +108,14 @@ func streamSection(ctx context.Context, p *Prober, input, key string, opts []Opt
 	stopped := false
 	finish := func() error {
 		if stopped {
-			cancel()
+			run.cancel()
 			_, _ = io.Copy(io.Discard, stdout)
 		}
 		waitErr := cmd.Wait()
 		if stopped {
 			return nil
 		}
-		if waitErr != nil && ctx.Err() == nil {
+		if waitErr != nil && run.ctx.Err() == nil {
 			return &ExitError{ExitCode: cmd.ProcessState.ExitCode(), Stderr: strings.TrimSpace(stderr.String()), Args: args, Cause: waitErr}
 		}
 		return nil
@@ -147,8 +161,8 @@ func streamSection(ctx context.Context, p *Prober, input, key string, opts []Opt
 	switch {
 	case probeErr != nil:
 		fail(probeErr)
-	case err != nil && ctx.Err() != nil:
-		fail(ctx.Err())
+	case err != nil && run.ctx.Err() != nil:
+		fail(run.err())
 	case err != nil:
 		fail(fmt.Errorf("ffprobe: decode output: %w", err))
 	case waitErr != nil:

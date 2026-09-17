@@ -861,7 +861,8 @@
           "type": [
             "integer",
             "string"
-          ]
+          ],
+          "description": "AVERROR code: a negated POSIX errno or an FFmpeg FFERRTAG value."
         },
         "string": {
           "type": "string"

@@ -91,7 +91,7 @@ func TestCapturesAgree(t *testing.T) {
 		ver := filepath.Base(dir)
 		t.Run(ver, func(t *testing.T) {
 			res := decodeCapture(t, filepath.Join(dir, "basic_mp4.basic.json"))
-			if res.Format == nil || !res.Format.Is("mp4") {
+			if !res.Format.Is("mp4") {
 				t.Fatalf("format = %+v", res.Format)
 			}
 			if got := res.Format.Tags.Value("title"); got != "Muxmix Test" {
@@ -130,7 +130,7 @@ func TestCapturesAgree(t *testing.T) {
 				t.Fatalf("chapters = %d", len(res.Chapters))
 			}
 			ch := res.Chapters[1]
-			if ch.Tags.Value("title") != "Outro" || ch.StartTime.Duration() != 500*time.Millisecond || ch.EndTime.Duration() != time.Second {
+			if ch.Tags.Value("title") != "Outro" || ch.StartTime() != 500*time.Millisecond || ch.EndTime() != time.Second {
 				t.Errorf("chapter = %+v", ch)
 			}
 			if !ch.TimeBase.Valid() || ch.TimeBase.Duration(ch.Start) != 500*time.Millisecond {
@@ -159,7 +159,7 @@ func TestCapturesAgree(t *testing.T) {
 			if att := mkv.StreamsOfType(MediaTypeAttachment); len(att) != 1 || att[0].Tags.Value("mimetype") != "text/plain" {
 				t.Errorf("attachment = %+v", att)
 			}
-			if d := mkv.AudioStream().DurationOf(); d < 900*time.Millisecond || d > 1100*time.Millisecond {
+			if d := mkv.AudioStream().Duration(); d < 900*time.Millisecond || d > 1100*time.Millisecond {
 				t.Errorf("mkv audio duration (from DURATION tag) = %v", d)
 			}
 
@@ -171,7 +171,7 @@ func TestCapturesAgree(t *testing.T) {
 
 			// Display matrix side data with variable keys.
 			rot := decodeCapture(t, filepath.Join(dir, "rotated_mp4.basic.json"))
-			if r := rot.VideoStream().Rotation(); r != -90 && r != 90 && r != 270 {
+			if r := rot.VideoStream().Rotation(); r != 270 {
 				t.Errorf("rotation = %d (side data %+v)", r, rot.VideoStream().SideDataList)
 			}
 
@@ -183,7 +183,7 @@ func TestCapturesAgree(t *testing.T) {
 
 			// Raw elementary stream: no timing at all.
 			raw := decodeCapture(t, filepath.Join(dir, "raw_h264.basic.json"))
-			if raw.Format.Duration.Valid() || raw.VideoStream().Duration.Valid() {
+			if raw.Format.DurationSecs.Valid() || raw.VideoStream().DurationSecs.Valid() {
 				t.Errorf("raw h264 should have no duration")
 			}
 			if raw.Format.Size.Int64() <= 0 {
@@ -198,7 +198,7 @@ func TestCapturesAgree(t *testing.T) {
 			var firstVideo *Packet
 			for i := range pk.Packets {
 				if pk.Packets[i].CodecType == MediaTypeVideo {
-					firstVideo = &pk.Packets[i]
+					firstVideo = pk.Packets[i]
 					break
 				}
 			}
@@ -220,8 +220,8 @@ func TestCapturesAgree(t *testing.T) {
 					if video == 2 && f.Time() != 40*time.Millisecond {
 						t.Errorf("second video frame time = %v", f.Time())
 					}
-					if f.DurationOf() != 40*time.Millisecond {
-						t.Errorf("video frame duration = %v", f.DurationOf())
+					if f.Duration() != 40*time.Millisecond {
+						t.Errorf("video frame duration = %v", f.Duration())
 					}
 				case f.IsAudio():
 					audio++
@@ -269,7 +269,7 @@ func TestCapturesAgree(t *testing.T) {
 
 			// -show_entries omits everything else; nothing is required.
 			ent := decodeCapture(t, filepath.Join(dir, "basic_mp4.entries.json"))
-			if ent.Format == nil || ent.Format.Filename == "" || len(ent.Streams) != 3 || ent.Streams[0].Width.Valid() || ent.Streams[0].Language() != "und" {
+			if ent.Format.Filename == "" || len(ent.Streams) != 3 || ent.Streams[0].Width.Valid() || ent.Streams[0].Language() != "und" {
 				t.Errorf("entries = %+v", ent)
 			}
 
@@ -285,17 +285,17 @@ func TestCapturesAgree(t *testing.T) {
 
 			// Version info.
 			vinfo := decodeCapture(t, filepath.Join(dir, "versions.json"))
-			if vinfo.ProgramVersion == nil || !strings.HasPrefix(vinfo.ProgramVersion.Version, ver[:3]) || len(vinfo.LibraryVersions) < 5 {
+			if vinfo.ProgramVersion.Version == "" || !strings.HasPrefix(vinfo.ProgramVersion.Version, ver[:3]) || len(vinfo.LibraryVersions) < 5 {
 				t.Errorf("versions = %+v", vinfo.ProgramVersion)
 			}
 			pix := decodeCapture(t, filepath.Join(dir, "pixel_formats.json"))
 			var yuv420p *PixelFormat
 			for i := range pix.PixelFormats {
 				if pix.PixelFormats[i].Name == "yuv420p" {
-					yuv420p = &pix.PixelFormats[i]
+					yuv420p = pix.PixelFormats[i]
 				}
 			}
-			if yuv420p == nil || yuv420p.NbComponents.Int() != 3 || len(yuv420p.Components) != 3 || yuv420p.Flags == nil || !yuv420p.Flags.Planar.Bool() {
+			if yuv420p == nil || yuv420p.NbComponents.Int() != 3 || len(yuv420p.Components) != 3 || !yuv420p.Flags.Planar.Bool() {
 				t.Errorf("yuv420p = %+v", yuv420p)
 			}
 		})
@@ -367,8 +367,8 @@ func TestSamplesDecode(t *testing.T) {
 	}
 	for _, f := range files {
 		res := decodeCapture(t, f)
-		if res.Format == nil || res.VideoStream() == nil || res.Duration() == 0 {
-			t.Errorf("%s: format=%v video=%v duration=%v", f, res.Format != nil, res.VideoStream() != nil, res.Duration())
+		if res.Format.Filename == "" || res.VideoStream() == nil || res.Duration() == 0 {
+			t.Errorf("%s: format=%q video=%v duration=%v", f, res.Format.Filename, res.VideoStream() != nil, res.Duration())
 		}
 	}
 }

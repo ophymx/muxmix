@@ -17,8 +17,17 @@
 //	res, err := ffprobe.Probe(ctx, "movie.mkv",
 //		ffprobe.ShowChapters(), ffprobe.ShowPrograms(), ffprobe.CountFrames())
 //
-// Packet and frame listings can be very large; Prober.Frames and
-// Prober.Packets stream them one at a time instead of building a Result.
+// Sections that only newer releases print, such as stream groups (7.0+),
+// can be gated on the binary. Prober.Version is cached, so the check is
+// free after the first call, and Prober.Sections lists exactly what the
+// running binary can print:
+//
+//	if v, err := ffprobe.Version(ctx); err == nil && v.AtLeast(7, 0) {
+//		res, err = ffprobe.Probe(ctx, "movie.iamf", ffprobe.ShowStreamGroups())
+//	}
+//
+// Packet and frame listings can be very large; Frames, Packets and
+// PacketsAndFrames stream them one at a time instead of building a Result.
 package ffprobe
 
 import (
@@ -29,18 +38,22 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"os"
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
-// Prober runs an ffprobe binary.
+// Prober runs an ffprobe binary. It is safe for concurrent use.
 type Prober struct {
-	binary string
-	env    []string
-	stderr io.Writer
+	binary  string
+	env     []string
+	stderr  io.Writer
+	timeout time.Duration
+
+	versionMu sync.Mutex
+	version   *VersionInfo
 }
 
 // ProberOption configures a Prober.
@@ -64,6 +77,14 @@ func WithEnv(env ...string) ProberOption {
 // for error messages.
 func WithStderr(w io.Writer) ProberOption {
 	return func(p *Prober) { p.stderr = w }
+}
+
+// WithTimeout bounds every probe this Prober runs; ffprobe is killed when
+// the timeout expires and the error wraps context.DeadlineExceeded. The
+// per-call Timeout option overrides it. Zero (the default) means no limit
+// beyond the caller's context.
+func WithTimeout(d time.Duration) ProberOption {
+	return func(p *Prober) { p.timeout = d }
 }
 
 // New returns a Prober.
@@ -131,6 +152,7 @@ type config struct {
 	extra        []string // appended verbatim before the input
 	stdin        io.Reader
 	timeout      time.Duration
+	hasTimeout   bool
 }
 
 func (c *config) apply(opts []Option) {
@@ -156,7 +178,8 @@ func ShowChapters() Option { return section("-show_chapters") }
 func ShowPrograms() Option { return section("-show_programs") }
 
 // ShowStreamGroups includes stream groups such as IAMF audio elements
-// (Result.StreamGroups). Requires ffprobe 7.0 or newer.
+// (Result.StreamGroups). Requires ffprobe 7.0 or newer; gate it on
+// Version(ctx).AtLeast(7, 0) or Sections.
 func ShowStreamGroups() Option { return section("-show_stream_groups") }
 
 // ShowPackets includes every packet (Result.Packets). Combined with
@@ -186,7 +209,8 @@ func ShowDataHash(algorithm string) Option {
 	return func(c *config) { c.modifiers = append(c.modifiers, "-show_data_hash", algorithm) }
 }
 
-// CountFrames decodes the input to fill Stream.NbReadFrames.
+// CountFrames decodes the input to fill Stream.NbReadFrames, which
+// Stream.FrameCount reads.
 func CountFrames() Option {
 	return func(c *config) { c.modifiers = append(c.modifiers, "-count_frames") }
 }
@@ -258,9 +282,12 @@ func Args(args ...string) Option {
 	return func(c *config) { c.extra = append(c.extra, args...) }
 }
 
-// Timeout bounds the whole ffprobe run; ffprobe is killed when it expires.
+// Timeout bounds this one probe, overriding the Prober's WithTimeout;
+// ffprobe is killed when it expires and the error wraps
+// context.DeadlineExceeded. Zero disables the Prober's default for this
+// call.
 func Timeout(d time.Duration) Option {
-	return func(c *config) { c.timeout = d }
+	return func(c *config) { c.timeout, c.hasTimeout = d, true }
 }
 
 func withStdin(r io.Reader) Option {
@@ -302,12 +329,9 @@ func (p *Prober) Run(ctx context.Context, input string, opts ...Option) ([]byte,
 	c.apply(opts)
 	args := p.buildArgs(&c, input)
 
-	if c.timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, c.timeout)
-		defer cancel()
-	}
-	cmd := p.command(ctx, args, &c)
+	run := p.newRun(ctx, &c, input)
+	defer run.cancel()
+	cmd := p.command(run.ctx, args, &c)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = p.stderrWriter(&stderr)
@@ -319,11 +343,11 @@ func (p *Prober) Run(ctx context.Context, input string, opts ...Option) ([]byte,
 		return out, probeErr
 	}
 	if runErr != nil {
+		if err := run.err(); err != nil {
+			return out, err
+		}
 		if cmd.ProcessState == nil {
 			return out, p.startError(runErr)
-		}
-		if ctx.Err() != nil {
-			return out, ctx.Err()
 		}
 		return out, &ExitError{
 			ExitCode: cmd.ProcessState.ExitCode(),
@@ -335,30 +359,49 @@ func (p *Prober) Run(ctx context.Context, input string, opts ...Option) ([]byte,
 	return out, nil
 }
 
-// VersionInfo describes the ffprobe binary.
-type VersionInfo struct {
-	Program   ProgramVersion
-	Libraries []LibraryVersion
+// probeRun is the context bookkeeping for one ffprobe process: the
+// caller's context, the timeout in force, and the derived context the
+// process runs under.
+type probeRun struct {
+	parent  context.Context
+	ctx     context.Context
+	cancel  context.CancelFunc
+	input   string
+	timeout time.Duration
 }
 
-// Version runs ffprobe -show_program_version -show_library_versions.
-func (p *Prober) Version(ctx context.Context) (*VersionInfo, error) {
-	raw, err := p.runBare(ctx, "-show_program_version", "-show_library_versions")
-	if err != nil {
-		return nil, err
+// newRun derives the process context, applying the per-call timeout when
+// given and the Prober's default otherwise.
+func (p *Prober) newRun(ctx context.Context, c *config, input string) *probeRun {
+	r := &probeRun{parent: ctx, input: input, timeout: p.timeout}
+	if c.hasTimeout {
+		r.timeout = c.timeout
 	}
-	var res Result
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return nil, fmt.Errorf("ffprobe: decode version output: %w", err)
+	if r.timeout > 0 {
+		r.ctx, r.cancel = context.WithTimeout(ctx, r.timeout)
+	} else {
+		r.ctx, r.cancel = context.WithCancel(ctx)
 	}
-	if res.ProgramVersion == nil {
-		return nil, fmt.Errorf("ffprobe: no program_version in output")
+	return r
+}
+
+// err reports why the process context ended, or nil when it has not. The
+// error names ffprobe and the input and wraps the context error, so
+// errors.Is(err, context.DeadlineExceeded) holds whether the deadline was
+// the caller's or the timeout option's.
+func (r *probeRun) err() error {
+	cause := r.ctx.Err()
+	if cause == nil {
+		return nil
 	}
-	return &VersionInfo{Program: *res.ProgramVersion, Libraries: res.LibraryVersions}, nil
+	if r.parent.Err() == nil && cause == context.DeadlineExceeded {
+		return fmt.Errorf("ffprobe: %s: timed out after %v: %w", r.input, r.timeout, cause)
+	}
+	return fmt.Errorf("ffprobe: %s: %w", r.input, cause)
 }
 
 // PixelFormats returns the pixel formats the binary supports.
-func (p *Prober) PixelFormats(ctx context.Context) ([]PixelFormat, error) {
+func (p *Prober) PixelFormats(ctx context.Context) ([]*PixelFormat, error) {
 	raw, err := p.runBare(ctx, "-show_pixel_formats")
 	if err != nil {
 		return nil, err
@@ -378,6 +421,9 @@ func (p *Prober) runBare(ctx context.Context, flags ...string) ([]byte, error) {
 	cmd.Stdout = &stdout
 	cmd.Stderr = p.stderrWriter(&stderr)
 	if err := cmd.Run(); err != nil {
+		if ctx.Err() != nil {
+			return nil, fmt.Errorf("ffprobe: %s: %w", strings.Join(flags, " "), ctx.Err())
+		}
 		if cmd.ProcessState == nil {
 			return nil, p.startError(err)
 		}
@@ -435,14 +481,4 @@ func errorSection(out []byte) *ProbeError {
 		return nil
 	}
 	return res.Error
-}
-
-// Exists reports whether path can be probed at all: it exists and ffprobe
-// recognises its format.
-func (p *Prober) Exists(ctx context.Context, path string) bool {
-	if _, err := os.Stat(path); err != nil {
-		return false
-	}
-	_, err := p.Probe(ctx, path, ShowFormat())
-	return err == nil
 }

@@ -15,14 +15,14 @@ func TestSideDataAccessors(t *testing.T) {
 			if dm == nil {
 				t.Fatalf("no display matrix: %+v", rot.VideoStream().SideDataList)
 			}
-			if deg := dm.Degrees(); deg != 90 && deg != 270 {
+			if deg := dm.Degrees(); deg != 270 {
 				t.Errorf("degrees = %d (rotation %v)", deg, dm.Rotation)
 			}
 			vals := dm.Values()
 			if len(vals) != 9 || vals[8] != 1<<30 {
 				t.Errorf("matrix values = %v", vals)
 			}
-			if rot.VideoStream().Rotation() != int(dm.Rotation.Float64()) {
+			if rot.VideoStream().Rotation() != 270 {
 				t.Errorf("Rotation() = %d vs %v", rot.VideoStream().Rotation(), dm.Rotation)
 			}
 			if rot.VideoStream().Stereo3D() != nil || rot.VideoStream().IsHDR() {
@@ -61,7 +61,7 @@ func TestSideDataAccessors(t *testing.T) {
 			// Generic decode of an entry with no typed accessor.
 			for _, sd := range pk.Packets[0].SideDataList {
 				var raw map[string]any
-				if err := DecodeSideData(&sd, &raw); err != nil || len(raw) == 0 {
+				if err := DecodeSideData(sd, &raw); err != nil || len(raw) == 0 {
 					t.Errorf("DecodeSideData = %v %v", raw, err)
 				}
 			}

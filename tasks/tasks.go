@@ -170,7 +170,7 @@ func (t *Tools) Inspect(ctx context.Context, input string, inputOpts ...ffprobe.
 	if v := res.VideoStream(); v != nil {
 		info.HasVideo = true
 		info.Width, info.Height = v.Resolution()
-		if rot := v.Rotation(); rot == 90 || rot == -90 || rot == 270 || rot == -270 {
+		if rot := v.Rotation(); rot == 90 || rot == 270 {
 			info.Width, info.Height = info.Height, info.Width
 		}
 	}

@@ -18,14 +18,14 @@ type Chapter struct {
 	// Start is the JSON "start" field.
 	Start Int `json:"start,omitzero"`
 
-	// StartTime is the JSON "start_time" field.
-	StartTime Seconds `json:"start_time,omitzero"`
+	// StartSecs is the JSON "start_time" field.
+	StartSecs Seconds `json:"start_time,omitzero"`
 
 	// End is the JSON "end" field.
 	End Int `json:"end,omitzero"`
 
-	// EndTime is the JSON "end_time" field.
-	EndTime Seconds `json:"end_time,omitzero"`
+	// EndSecs is the JSON "end_time" field.
+	EndSecs Seconds `json:"end_time,omitzero"`
 
 	// Tags is the JSON "tags" field.
 	Tags Tags `json:"tags,omitempty"`
@@ -108,11 +108,11 @@ type Format struct {
 	// FormatLongName is the JSON "format_long_name" field.
 	FormatLongName string `json:"format_long_name,omitempty"`
 
-	// StartTime is the JSON "start_time" field.
-	StartTime Seconds `json:"start_time,omitzero"`
+	// StartSecs is the JSON "start_time" field.
+	StartSecs Seconds `json:"start_time,omitzero"`
 
-	// Duration is the JSON "duration" field.
-	Duration Seconds `json:"duration,omitzero"`
+	// DurationSecs is the JSON "duration" field.
+	DurationSecs Seconds `json:"duration,omitzero"`
 
 	// Size is the JSON "size" field.
 	Size Int `json:"size,omitzero"`
@@ -146,32 +146,32 @@ type Frame struct {
 	// PTS is the JSON "pts" field.
 	PTS Int `json:"pts,omitzero"`
 
-	// PTSTime is the JSON "pts_time" field.
-	PTSTime Seconds `json:"pts_time,omitzero"`
+	// PTSSecs is the JSON "pts_time" field.
+	PTSSecs Seconds `json:"pts_time,omitzero"`
 
 	// PktPTS is the JSON "pkt_pts" field. Dropped from the XSD after FFmpeg 4.4 but still printed in JSON.
 	PktPTS Int `json:"pkt_pts,omitzero"`
 
-	// PktPTSTime is the JSON "pkt_pts_time" field. Dropped from the XSD after FFmpeg 4.4 but still printed in JSON.
-	PktPTSTime Seconds `json:"pkt_pts_time,omitzero"`
+	// PktPTSSecs is the JSON "pkt_pts_time" field. Dropped from the XSD after FFmpeg 4.4 but still printed in JSON.
+	PktPTSSecs Seconds `json:"pkt_pts_time,omitzero"`
 
 	// PktDTS is the JSON "pkt_dts" field.
 	PktDTS Int `json:"pkt_dts,omitzero"`
 
-	// PktDTSTime is the JSON "pkt_dts_time" field.
-	PktDTSTime Seconds `json:"pkt_dts_time,omitzero"`
+	// PktDTSSecs is the JSON "pkt_dts_time" field.
+	PktDTSSecs Seconds `json:"pkt_dts_time,omitzero"`
 
 	// BestEffortTimestamp is the JSON "best_effort_timestamp" field.
 	BestEffortTimestamp Int `json:"best_effort_timestamp,omitzero"`
 
-	// BestEffortTimestampTime is the JSON "best_effort_timestamp_time" field.
-	BestEffortTimestampTime Seconds `json:"best_effort_timestamp_time,omitzero"`
+	// BestEffortTimestampSecs is the JSON "best_effort_timestamp_time" field.
+	BestEffortTimestampSecs Seconds `json:"best_effort_timestamp_time,omitzero"`
 
 	// PktDuration is the JSON "pkt_duration" field. Dropped from the XSD after FFmpeg 6.1 but still printed in JSON.
 	PktDuration Int `json:"pkt_duration,omitzero"`
 
-	// PktDurationTime is the JSON "pkt_duration_time" field. Dropped from the XSD after FFmpeg 6.1 but still printed in JSON.
-	PktDurationTime Seconds `json:"pkt_duration_time,omitzero"`
+	// PktDurationSecs is the JSON "pkt_duration_time" field. Dropped from the XSD after FFmpeg 6.1 but still printed in JSON.
+	PktDurationSecs Seconds `json:"pkt_duration_time,omitzero"`
 
 	// PktPos is the JSON "pkt_pos" field.
 	PktPos Int `json:"pkt_pos,omitzero"`
@@ -236,11 +236,11 @@ type Frame struct {
 	// ChromaLocation is the JSON "chroma_location" field.
 	ChromaLocation string `json:"chroma_location,omitempty"`
 
-	// Duration is the JSON "duration" field. Added in FFmpeg 6.0.
-	Duration Int `json:"duration,omitzero"`
+	// DurationTS is the JSON "duration" field. Added in FFmpeg 6.0.
+	DurationTS Int `json:"duration,omitzero"`
 
-	// DurationTime is the JSON "duration_time" field. Added in FFmpeg 6.0.
-	DurationTime Seconds `json:"duration_time,omitzero"`
+	// DurationSecs is the JSON "duration_time" field. Added in FFmpeg 6.0.
+	DurationSecs Seconds `json:"duration_time,omitzero"`
 
 	// CropTop is the JSON "crop_top" field. Added in FFmpeg 6.1.
 	CropTop Int `json:"crop_top,omitzero"`
@@ -270,10 +270,10 @@ type Frame struct {
 	NumRects Int `json:"num_rects,omitzero"`
 
 	// Logs is the JSON "logs" field.
-	Logs []Log `json:"logs,omitempty"`
+	Logs []*Log `json:"logs,omitempty"`
 
 	// SideDataList is the JSON "side_data_list" field.
-	SideDataList []FrameSideData `json:"side_data_list,omitempty"`
+	SideDataList []*FrameSideData `json:"side_data_list,omitempty"`
 
 	// Tags is the JSON "tags" field.
 	Tags Tags `json:"tags,omitempty"`
@@ -294,10 +294,10 @@ type FrameSideData struct {
 	Timecode string `json:"timecode,omitempty"`
 
 	// Timecodes is the JSON "timecodes" field.
-	Timecodes []FrameSideDataTimecode `json:"timecodes,omitempty"`
+	Timecodes []*FrameSideDataTimecode `json:"timecodes,omitempty"`
 
 	// Components is the JSON "components" field. Added in FFmpeg 7.0.
-	Components []FrameSideDataComponent `json:"components,omitempty"`
+	Components []*FrameSideDataComponent `json:"components,omitempty"`
 
 	// Extra holds every key ffprobe printed that is not a named field above.
 	Extra map[string]any `json:"-"`
@@ -333,7 +333,7 @@ func (v FrameSideData) MarshalJSON() ([]byte, error) {
 // collected in Extra.
 type FrameSideDataComponent struct {
 	// Pieces is the JSON "pieces" field. Added in FFmpeg 7.0.
-	Pieces []FrameSideDataPiece `json:"pieces,omitempty"`
+	Pieces []*FrameSideDataPiece `json:"pieces,omitempty"`
 
 	// Extra holds every key ffprobe printed that is not a named field above.
 	Extra map[string]any `json:"-"`
@@ -455,20 +455,20 @@ type Packet struct {
 	// PTS is the JSON "pts" field.
 	PTS Int `json:"pts,omitzero"`
 
-	// PTSTime is the JSON "pts_time" field.
-	PTSTime Seconds `json:"pts_time,omitzero"`
+	// PTSSecs is the JSON "pts_time" field.
+	PTSSecs Seconds `json:"pts_time,omitzero"`
 
 	// DTS is the JSON "dts" field.
 	DTS Int `json:"dts,omitzero"`
 
-	// DTSTime is the JSON "dts_time" field.
-	DTSTime Seconds `json:"dts_time,omitzero"`
+	// DTSSecs is the JSON "dts_time" field.
+	DTSSecs Seconds `json:"dts_time,omitzero"`
 
-	// Duration is the JSON "duration" field.
-	Duration Int `json:"duration,omitzero"`
+	// DurationTS is the JSON "duration" field.
+	DurationTS Int `json:"duration,omitzero"`
 
-	// DurationTime is the JSON "duration_time" field.
-	DurationTime Seconds `json:"duration_time,omitzero"`
+	// DurationSecs is the JSON "duration_time" field.
+	DurationSecs Seconds `json:"duration_time,omitzero"`
 
 	// Size is the JSON "size" field.
 	Size Int `json:"size,omitzero"`
@@ -486,7 +486,7 @@ type Packet struct {
 	DataHash string `json:"data_hash,omitempty"`
 
 	// SideDataList is the JSON "side_data_list" field.
-	SideDataList []SideData `json:"side_data_list,omitempty"`
+	SideDataList []*SideData `json:"side_data_list,omitempty"`
 
 	// Tags is the JSON "tags" field.
 	Tags Tags `json:"tags,omitempty"`
@@ -510,10 +510,10 @@ type PixelFormat struct {
 	BitsPerPixel Int `json:"bits_per_pixel,omitzero"`
 
 	// Flags is the JSON "flags" field.
-	Flags *PixelFormatFlags `json:"flags,omitempty"`
+	Flags PixelFormatFlags `json:"flags,omitzero"`
 
 	// Components is the JSON "components" field.
-	Components []PixelFormatComponent `json:"components,omitempty"`
+	Components []*PixelFormatComponent `json:"components,omitempty"`
 }
 
 // PixelFormatComponent is ffprobe's pixelFormatComponentType.
@@ -582,7 +582,7 @@ type PixelFormatFlags struct {
 // ProbeError is ffprobe's errorType.
 type ProbeError struct {
 	// Code is the JSON "code" field.
-	Code Int `json:"code,omitzero"`
+	Code AVError `json:"code,omitzero"`
 
 	// Message is the JSON "string" field.
 	Message string `json:"string,omitempty"`
@@ -599,14 +599,14 @@ type Program struct {
 	// NbStreams is the JSON "nb_streams" field.
 	NbStreams Int `json:"nb_streams,omitzero"`
 
-	// StartTime is the JSON "start_time" field. Dropped from the XSD after FFmpeg 4.4 but still printed in JSON.
-	StartTime Seconds `json:"start_time,omitzero"`
+	// StartSecs is the JSON "start_time" field. Dropped from the XSD after FFmpeg 4.4 but still printed in JSON.
+	StartSecs Seconds `json:"start_time,omitzero"`
 
 	// StartPTS is the JSON "start_pts" field. Dropped from the XSD after FFmpeg 4.4 but still printed in JSON.
 	StartPTS Int `json:"start_pts,omitzero"`
 
-	// EndTime is the JSON "end_time" field. Dropped from the XSD after FFmpeg 4.4 but still printed in JSON.
-	EndTime Seconds `json:"end_time,omitzero"`
+	// EndSecs is the JSON "end_time" field. Dropped from the XSD after FFmpeg 4.4 but still printed in JSON.
+	EndSecs Seconds `json:"end_time,omitzero"`
 
 	// EndPTS is the JSON "end_pts" field. Dropped from the XSD after FFmpeg 4.4 but still printed in JSON.
 	EndPTS Int `json:"end_pts,omitzero"`
@@ -618,7 +618,7 @@ type Program struct {
 	PcrPid Int `json:"pcr_pid,omitzero"`
 
 	// Streams is the JSON "streams" field.
-	Streams []Stream `json:"streams,omitempty"`
+	Streams []*Stream `json:"streams,omitempty"`
 
 	// Tags is the JSON "tags" field.
 	Tags Tags `json:"tags,omitempty"`
@@ -648,40 +648,40 @@ type ProgramVersion struct {
 // Result is ffprobe's ffprobeType.
 type Result struct {
 	// ProgramVersion is the JSON "program_version" field.
-	ProgramVersion *ProgramVersion `json:"program_version,omitempty"`
+	ProgramVersion ProgramVersion `json:"program_version,omitzero"`
 
 	// LibraryVersions is the JSON "library_versions" field.
-	LibraryVersions []LibraryVersion `json:"library_versions,omitempty"`
+	LibraryVersions []*LibraryVersion `json:"library_versions,omitempty"`
 
 	// PixelFormats is the JSON "pixel_formats" field.
-	PixelFormats []PixelFormat `json:"pixel_formats,omitempty"`
+	PixelFormats []*PixelFormat `json:"pixel_formats,omitempty"`
 
 	// Packets is the JSON "packets" field.
-	Packets []Packet `json:"packets,omitempty"`
+	Packets []*Packet `json:"packets,omitempty"`
 
 	// Frames is the JSON "frames" field.
-	Frames []Frame `json:"frames,omitempty"`
+	Frames []*Frame `json:"frames,omitempty"`
 
 	// PacketsAndFrames is the JSON "packets_and_frames" field.
 	PacketsAndFrames []PacketOrFrame `json:"packets_and_frames,omitempty"`
 
 	// Programs is the JSON "programs" field.
-	Programs []Program `json:"programs,omitempty"`
+	Programs []*Program `json:"programs,omitempty"`
 
 	// Streams is the JSON "streams" field.
-	Streams []Stream `json:"streams,omitempty"`
+	Streams []*Stream `json:"streams,omitempty"`
 
 	// Chapters is the JSON "chapters" field.
-	Chapters []Chapter `json:"chapters,omitempty"`
+	Chapters []*Chapter `json:"chapters,omitempty"`
 
 	// Format is the JSON "format" field.
-	Format *Format `json:"format,omitempty"`
+	Format Format `json:"format,omitzero"`
 
 	// Error is the JSON "error" field.
 	Error *ProbeError `json:"error,omitempty"`
 
 	// StreamGroups is the JSON "stream_groups" field. Added in FFmpeg 7.0.
-	StreamGroups []StreamGroup `json:"stream_groups,omitempty"`
+	StreamGroups []*StreamGroup `json:"stream_groups,omitempty"`
 }
 
 // SideData is ffprobe's packetSideDataType.
@@ -833,14 +833,14 @@ type Stream struct {
 	// StartPTS is the JSON "start_pts" field.
 	StartPTS Int `json:"start_pts,omitzero"`
 
-	// StartTime is the JSON "start_time" field.
-	StartTime Seconds `json:"start_time,omitzero"`
+	// StartSecs is the JSON "start_time" field.
+	StartSecs Seconds `json:"start_time,omitzero"`
 
 	// DurationTS is the JSON "duration_ts" field.
 	DurationTS Int `json:"duration_ts,omitzero"`
 
-	// Duration is the JSON "duration" field.
-	Duration Seconds `json:"duration,omitzero"`
+	// DurationSecs is the JSON "duration" field.
+	DurationSecs Seconds `json:"duration,omitzero"`
 
 	// BitRate is the JSON "bit_rate" field.
 	BitRate Int `json:"bit_rate,omitzero"`
@@ -891,10 +891,10 @@ type Stream struct {
 	NalLengthSize Int `json:"nal_length_size,omitzero"`
 
 	// Disposition is the JSON "disposition" field.
-	Disposition *Disposition `json:"disposition,omitempty"`
+	Disposition Disposition `json:"disposition,omitzero"`
 
 	// SideDataList is the JSON "side_data_list" field.
-	SideDataList []SideData `json:"side_data_list,omitempty"`
+	SideDataList []*SideData `json:"side_data_list,omitempty"`
 
 	// Tags is the JSON "tags" field.
 	Tags Tags `json:"tags,omitempty"`
@@ -915,16 +915,16 @@ type StreamGroup struct {
 	ID string `json:"id,omitempty"`
 
 	// Disposition is the JSON "disposition" field. Added in FFmpeg 7.0.
-	Disposition *Disposition `json:"disposition,omitempty"`
+	Disposition Disposition `json:"disposition,omitzero"`
 
 	// Tags is the JSON "tags" field. Added in FFmpeg 7.0.
 	Tags Tags `json:"tags,omitempty"`
 
 	// Streams is the JSON "streams" field. Added in FFmpeg 7.0.
-	Streams []Stream `json:"streams,omitempty"`
+	Streams []*Stream `json:"streams,omitempty"`
 
 	// Components is the JSON "components" field. Added in FFmpeg 7.0.
-	Components []StreamGroupComponent `json:"components,omitempty"`
+	Components []*StreamGroupComponent `json:"components,omitempty"`
 }
 
 // StreamGroupBlock is ffprobe's streamGroupBlockType. Added in FFmpeg 7.0.
@@ -966,7 +966,7 @@ func (v StreamGroupBlock) MarshalJSON() ([]byte, error) {
 // collected in Extra.
 type StreamGroupComponent struct {
 	// Subcomponents is the JSON "subcomponents" field. Added in FFmpeg 7.0.
-	Subcomponents []StreamGroupSubComponent `json:"subcomponents,omitempty"`
+	Subcomponents []*StreamGroupSubComponent `json:"subcomponents,omitempty"`
 
 	// Extra holds every key ffprobe printed that is not a named field above.
 	Extra map[string]any `json:"-"`
@@ -1002,7 +1002,7 @@ func (v StreamGroupComponent) MarshalJSON() ([]byte, error) {
 // collected in Extra.
 type StreamGroupPiece struct {
 	// Subpieces is the JSON "subpieces" field. Added in FFmpeg 7.0.
-	Subpieces []StreamGroupSubPiece `json:"subpieces,omitempty"`
+	Subpieces []*StreamGroupSubPiece `json:"subpieces,omitempty"`
 
 	// Extra holds every key ffprobe printed that is not a named field above.
 	Extra map[string]any `json:"-"`
@@ -1038,7 +1038,7 @@ func (v StreamGroupPiece) MarshalJSON() ([]byte, error) {
 // collected in Extra.
 type StreamGroupSubComponent struct {
 	// Pieces is the JSON "pieces" field. Added in FFmpeg 7.0.
-	Pieces []StreamGroupPiece `json:"pieces,omitempty"`
+	Pieces []*StreamGroupPiece `json:"pieces,omitempty"`
 
 	// Extra holds every key ffprobe printed that is not a named field above.
 	Extra map[string]any `json:"-"`
@@ -1074,7 +1074,7 @@ func (v StreamGroupSubComponent) MarshalJSON() ([]byte, error) {
 // collected in Extra.
 type StreamGroupSubPiece struct {
 	// Blocks is the JSON "blocks" field. Added in FFmpeg 7.0.
-	Blocks []StreamGroupBlock `json:"blocks,omitempty"`
+	Blocks []*StreamGroupBlock `json:"blocks,omitempty"`
 
 	// Extra holds every key ffprobe printed that is not a named field above.
 	Extra map[string]any `json:"-"`

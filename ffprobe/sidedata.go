@@ -66,15 +66,13 @@ func DecodeSideData(entry SideDataEntry, v any) error {
 	return json.Unmarshal(b, v)
 }
 
-// SideDataAs finds the first entry of the given type in a list of SideData
-// or FrameSideData and decodes it into T. It returns false when no such
-// entry exists.
-func SideDataAs[T any, E any, PE interface {
-	*E
-	SideDataEntry
-}](list []E, typeName string) (*T, bool) {
-	for i := range list {
-		entry := PE(&list[i])
+// SideDataAs finds the first entry of the given type in a Stream, Packet or
+// Frame SideDataList and decodes it into T. It returns false when no such
+// entry exists or it does not decode.
+//
+//	dm, ok := ffprobe.SideDataAs[ffprobe.DisplayMatrix](stream.SideDataList, ffprobe.SideDataDisplayMatrix)
+func SideDataAs[T any, E SideDataEntry](list []E, typeName string) (*T, bool) {
+	for _, entry := range list {
 		if strings.EqualFold(entry.Type(), typeName) {
 			var v T
 			if err := DecodeSideData(entry, &v); err != nil {
@@ -90,19 +88,20 @@ func SideDataAs[T any, E any, PE interface {
 
 // DisplayMatrix is the rotation and 3x3 transform ffmpeg attaches to video.
 type DisplayMatrix struct {
-	// Rotation in degrees as ffmpeg reports it: counter-clockwise is
-	// negative, so a phone video shot upright may report -90.
+	// Rotation in degrees exactly as ffprobe prints it, which is
+	// av_display_rotation_get's counter-clockwise angle in [-180, 180]: a
+	// phone video that must turn 90 degrees clockwise to display upright
+	// reports -90, and a file with the legacy "rotate=270" tag reports 90.
 	Rotation Seconds `json:"rotation"`
 	// Matrix is ffprobe's hex dump of the 3x3 fixed-point matrix.
 	Matrix string `json:"displaymatrix"`
 }
 
-// Degrees returns the rotation as an int, normalised to 0, 90, 180 or 270
-// clockwise.
+// Degrees returns the clockwise rotation a player applies before display,
+// normalised to 0, 90, 180 or 270: the negation of Rotation, which is what
+// ffmpeg's own autorotate and the legacy "rotate" tag use.
 func (d *DisplayMatrix) Degrees() int {
-	deg := int(d.Rotation.Float64())
-	deg = ((deg % 360) + 360) % 360
-	return deg
+	return normaliseDegrees(-int(d.Rotation.Float64()))
 }
 
 // Values returns the nine matrix coefficients (16.16 fixed point, as in
@@ -182,8 +181,12 @@ func (m *MasteringDisplay) HasPrimaries() bool { return m.RedX.Valid() && m.Whit
 // HasLuminance reports whether the luminance range was present.
 func (m *MasteringDisplay) HasLuminance() bool { return m.MaxLuminance.Valid() }
 
-// MaxNits and MinNits return the luminance range in cd/m².
+// MaxNits returns the mastering display's peak luminance in cd/m² (1000
+// for a typical HDR10 grade), or 0 when absent.
 func (m *MasteringDisplay) MaxNits() float64 { return m.MaxLuminance.Float64() }
+
+// MinNits returns the mastering display's black level in cd/m² (0.0001
+// or 0.005 for a typical HDR10 grade), or 0 when absent.
 func (m *MasteringDisplay) MinNits() float64 { return m.MinLuminance.Float64() }
 
 // ContentLightLevel is the HDR content light level (CTA-861.3).
@@ -317,12 +320,9 @@ func (f *Frame) ContentLightLevel() *ContentLightLevel {
 func (f *Frame) HDR10Plus() bool { return hasSideData(f.SideDataList, SideDataFrameHDR10Plus) }
 
 // hasSideData reports whether the list has an entry of the given type.
-func hasSideData[E any, PE interface {
-	*E
-	SideDataEntry
-}](list []E, typeName string) bool {
-	for i := range list {
-		if strings.EqualFold(PE(&list[i]).Type(), typeName) {
+func hasSideData[E SideDataEntry](list []E, typeName string) bool {
+	for _, entry := range list {
+		if strings.EqualFold(entry.Type(), typeName) {
 			return true
 		}
 	}

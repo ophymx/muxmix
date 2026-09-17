@@ -278,7 +278,7 @@ func BuildTranscodePlan(info *Info, sys *hwaccel.System, input, output string, o
 				ps.Action, ps.Reason = Drop, "not the main video stream"
 			default:
 				w, h := s.Resolution()
-				if s.Rotation() == 90 || s.Rotation() == -90 || s.Rotation() == 270 {
+				if rot := s.Rotation(); rot == 90 || rot == 270 {
 					w, h = h, w
 				}
 				needsScale := (vrule.MaxWidth > 0 && w > vrule.MaxWidth) || (vrule.MaxHeight > 0 && h > vrule.MaxHeight)

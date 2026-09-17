@@ -7,9 +7,58 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
+
+func TestTimeoutLive(t *testing.T) {
+	requireFFprobe(t)
+	ctx := context.Background()
+	in := media("basic.mp4")
+
+	check := func(what string, err error) {
+		t.Helper()
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Errorf("%s: err = %v, want context.DeadlineExceeded", what, err)
+		}
+		if err == nil || !strings.HasPrefix(err.Error(), "ffprobe: ") || !strings.Contains(err.Error(), in) {
+			t.Errorf("%s: err = %v, want the ffprobe prefix and the input path", what, err)
+		}
+	}
+
+	// Per-call option, with -show_frames so ffprobe has work to interrupt.
+	_, err := Probe(ctx, in, ShowFrames(), Timeout(time.Nanosecond))
+	check("Timeout option", err)
+
+	// Prober default, overridable per call.
+	p := New(WithTimeout(time.Nanosecond))
+	_, err = p.Probe(ctx, in)
+	check("WithTimeout", err)
+	if _, err := p.Probe(ctx, in, Timeout(30*time.Second)); err != nil {
+		t.Errorf("per-call Timeout should override WithTimeout: %v", err)
+	}
+	if _, err := p.Probe(ctx, in, Timeout(0)); err != nil {
+		t.Errorf("Timeout(0) should disable WithTimeout: %v", err)
+	}
+
+	// Streaming iterators report the same error.
+	var got error
+	for _, err := range p.Frames(ctx, in) {
+		got = err
+	}
+	check("Frames", got)
+
+	// The caller's own deadline is reported the same way, minus the
+	// "timed out after" clause.
+	dctx, cancel := context.WithTimeout(ctx, time.Nanosecond)
+	defer cancel()
+	_, err = Probe(dctx, in)
+	check("caller deadline", err)
+	if strings.Contains(err.Error(), "timed out after") {
+		t.Errorf("caller deadline reported as the timeout option: %v", err)
+	}
+}
 
 func isNotExist(err error) bool { return errors.Is(err, fs.ErrNotExist) }
 
@@ -50,7 +99,7 @@ func TestProbeLive(t *testing.T) {
 	}
 	// Sections are exactly what was asked for.
 	only, err := Probe(ctx, media("basic.mp4"), ShowChapters())
-	if err != nil || only.Format != nil || len(only.Streams) != 0 || len(only.Chapters) != 2 {
+	if err != nil || only.Format.Filename != "" || len(only.Streams) != 0 || len(only.Chapters) != 2 {
 		t.Errorf("chapters only: %+v %v", only, err)
 	}
 
@@ -59,7 +108,7 @@ func TestProbeLive(t *testing.T) {
 		t.Errorf("missing file: %v", err)
 	}
 	var pe *ProbeError
-	if !errors.As(err, &pe) || pe.Code.Int64() != codeENOENT {
+	if !errors.As(err, &pe) || pe.Code.Errno() != syscall.ENOENT || pe.Code != -2 {
 		t.Errorf("expected ProbeError ENOENT, got %v", err)
 	}
 

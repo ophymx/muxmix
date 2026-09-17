@@ -381,10 +381,29 @@ var jsonOnlyFields = map[string][]jsonOnly{
 
 type jsonOnly struct{ name, typ, since string }
 
-// fieldNameOverrides replaces the derived Go name for specific fields.
+// fieldNameOverrides replaces the derived Go name for specific fields. The
+// integer "duration" of frames and packets is a tick count, so it takes the
+// TS suffix streams already use (duration_ts) and leaves Duration() free
+// for the time.Duration helper.
 var fieldNameOverrides = map[string]string{
-	"errorType.string": "Message",
+	"errorType.string":    "Message",
+	"frameType.duration":  "DurationTS",
+	"packetType.duration": "DurationTS",
 }
+
+// fieldTypeOverrides replaces the derived Go type for specific fields. The
+// error code is an AVERROR value with named constants in errors.go.
+var fieldTypeOverrides = map[string]string{
+	"errorType.code": "AVError",
+}
+
+// secondsSuffix names every field ffprobe prints as decimal seconds. The
+// Go name drops ffprobe's own "_time" suffix and adds "Secs" ("duration"
+// and "duration_time" both become DurationSecs, "start_time" becomes
+// StartSecs), which leaves Duration() and StartTime() free for the
+// time.Duration helpers and pairs each field with its integer tick
+// counterpart (DurationTS, StartPTS, PTS).
+const secondsSuffix = "Secs"
 
 // boolTypes and boolFields mark xsd:int fields that are really 0/1 flags.
 var boolTypes = map[string]bool{"streamDispositionType": true, "pixelFormatFlagsType": true}
@@ -762,7 +781,15 @@ var rationalFields = map[string]bool{
 }
 
 // goType returns the Go type expression for a field and the JSON tag option.
+//
+// Every array section is a slice of pointers so a range loop can call the
+// pointer-receiver helpers directly. A nested object is a value (its fields
+// all report Valid, so the zero value is honest and never panics); the only
+// pointer is the "error" section, whose presence is the signal.
 func (m *model) goType(td *typeDef, f *field) (typ, tagOpt string) {
+	if t, ok := fieldTypeOverrides[td.xsd+"."+f.json]; ok {
+		return t, "omitzero"
+	}
 	if f.attr {
 		if boolTypes[td.xsd] || boolFields[f.json] {
 			return "Bool", "omitzero"
@@ -790,17 +817,20 @@ func (m *model) goType(td *typeDef, f *field) (typ, tagOpt string) {
 		return "Tags", "omitempty"
 	case kindWrapper:
 		elem := m.types[ref.elemType]
-		return "[]" + elem.goName, "omitempty"
+		return "[]*" + elem.goName, "omitempty"
 	case kindChoice:
 		if f.json == "packets_and_frames" {
 			return "[]PacketOrFrame", "omitempty"
 		}
-		return "[]Frame", "omitempty"
+		return "[]*Frame", "omitempty"
 	case kindStruct:
 		if f.unbounded {
-			return "[]" + ref.goName, "omitempty"
+			return "[]*" + ref.goName, "omitempty"
 		}
-		return "*" + ref.goName, "omitempty"
+		if ref.xsd == "errorType" {
+			return "*" + ref.goName, "omitempty"
+		}
+		return ref.goName, "omitzero"
 	}
 	return "json.RawMessage", "omitempty"
 }
@@ -831,7 +861,7 @@ func (m *model) renderGo() ([]byte, error) {
 			typ, opt := m.goType(td, f)
 			known = append(known, f.json)
 			b.WriteString("\t" + fieldDoc(td, f, m) + "\n")
-			fmt.Fprintf(&b, "\t%s %s `json:\"%s,%s\"`\n\n", fieldName(td, f), typ, f.json, opt)
+			fmt.Fprintf(&b, "\t%s %s `json:\"%s,%s\"`\n\n", m.fieldName(td, f), typ, f.json, opt)
 		}
 		if td.variable {
 			b.WriteString("\t// Extra holds every key ffprobe printed that is not a named field above.\n")
@@ -845,16 +875,20 @@ func (m *model) renderGo() ([]byte, error) {
 	return format.Source(b.Bytes())
 }
 
-func fieldName(td *typeDef, f *field) string {
+func (m *model) fieldName(td *typeDef, f *field) string {
 	if n, ok := fieldNameOverrides[td.xsd+"."+f.json]; ok {
 		return n
 	}
-	return goFieldName(f.json)
+	name := goFieldName(f.json)
+	if typ, _ := m.goType(td, f); typ == "Seconds" {
+		name = strings.TrimSuffix(name, "Time") + secondsSuffix
+	}
+	return name
 }
 
 func fieldDoc(td *typeDef, f *field, m *model) string {
 	var parts []string
-	parts = append(parts, fmt.Sprintf("// %s is the JSON \"%s\" field.", fieldName(td, f), f.json))
+	parts = append(parts, fmt.Sprintf("// %s is the JSON \"%s\" field.", m.fieldName(td, f), f.json))
 	if f.doc != "" {
 		parts = append(parts, f.doc)
 	}
@@ -937,6 +971,8 @@ func (m *model) fieldSchema(td *typeDef, f *field) *jsonschema.Schema {
 	switch {
 	case typ == "Int":
 		s = &jsonschema.Schema{Types: []string{"integer", "string"}}
+	case typ == "AVError":
+		s = &jsonschema.Schema{Types: []string{"integer", "string"}, Description: "AVERROR code: a negated POSIX errno or an FFmpeg FFERRTAG value."}
 	case typ == "Seconds":
 		s = &jsonschema.Schema{Types: []string{"number", "string"}}
 	case typ == "Bool":
@@ -948,9 +984,11 @@ func (m *model) fieldSchema(td *typeDef, f *field) *jsonschema.Schema {
 	case typ == "Tags":
 		s = &jsonschema.Schema{Ref: "#/$defs/Tags"}
 	case strings.HasPrefix(typ, "[]"):
-		s = &jsonschema.Schema{Type: "array", Items: &jsonschema.Schema{Ref: "#/$defs/" + typ[2:]}}
+		s = &jsonschema.Schema{Type: "array", Items: &jsonschema.Schema{Ref: "#/$defs/" + strings.TrimPrefix(typ[2:], "*")}}
 	case strings.HasPrefix(typ, "*"):
 		s = &jsonschema.Schema{Ref: "#/$defs/" + typ[1:]}
+	case typ != "json.RawMessage":
+		s = &jsonschema.Schema{Ref: "#/$defs/" + typ}
 	default:
 		s = &jsonschema.Schema{}
 	}

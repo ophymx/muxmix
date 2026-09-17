@@ -48,10 +48,20 @@ func (i Int) Or(def int64) int64 {
 	return def
 }
 
+// OrInt returns the value as an int, or def when not Valid.
+func (i Int) OrInt(def int) int {
+	if i.ok {
+		return int(i.v)
+	}
+	return def
+}
+
 // IsZero reports whether the field is absent; it lets encoding/json's
 // omitzero drop it.
 func (i Int) IsZero() bool { return !i.ok }
 
+// String prints the value in decimal, or "N/A" when not Valid, matching
+// ffprobe's own spelling.
 func (i Int) String() string {
 	if !i.ok {
 		return notAvailable
@@ -128,6 +138,8 @@ func (s Seconds) Or(def time.Duration) time.Duration {
 // IsZero reports whether the field is absent.
 func (s Seconds) IsZero() bool { return !s.ok }
 
+// String prints the value with six decimals ("0.040000") the way ffprobe
+// does, or "N/A" when not Valid.
 func (s Seconds) String() string {
 	if !s.ok {
 		return notAvailable
@@ -181,6 +193,7 @@ func (b Bool) Bool() bool { return b.v }
 // IsZero reports whether the field is absent.
 func (b Bool) IsZero() bool { return !b.ok }
 
+// String prints "1" or "0" the way ffprobe does, or "N/A" when not Valid.
 func (b Bool) String() string {
 	if !b.ok {
 		return notAvailable
