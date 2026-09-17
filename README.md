@@ -5,7 +5,7 @@ Go packages for driving `ffmpeg` and `ffprobe`.
 | Package                | What it does                                                          |
 |------------------------|-----------------------------------------------------------------------|
 | `ffprobe`              | Typed, version-tolerant ffprobe results; streaming packet/frame reads |
-| `ffmpeg`               | Run ffmpeg with progress parsing and report capture                   |
+| `ffmpeg`               | Structured commands, live progress, graceful cancel, version parsing  |
 | `ffmpeg/filtergraph`   | Build and validate filtergraph strings                                |
 | `ffmpeg/hwaccel`       | Detect built-in and actually usable hardware acceleration             |
 

@@ -1,0 +1,2 @@
+/tmp/tmp.jytIXB409l/missing.mp4: No such file or directory
+exit=1

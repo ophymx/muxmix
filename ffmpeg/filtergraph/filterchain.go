@@ -10,6 +10,9 @@ import (
 type FilterChain struct {
 	Filters []*Filter `json:"filters"`
 	parent  *FilterGraph
+	// pendingInputs holds labels given by Input before any filter exists;
+	// they are attached to the first filter added.
+	pendingInputs []string
 }
 
 // NewFilterChain creates a new filter chain
@@ -21,6 +24,10 @@ func NewFilterChain() *FilterChain {
 
 // Add adds a filter to the chain
 func (fc *FilterChain) Add(filter *Filter) *FilterChain {
+	if len(fc.Filters) == 0 && len(fc.pendingInputs) > 0 {
+		filter.InputLabels = append(fc.pendingInputs, filter.InputLabels...)
+		fc.pendingInputs = nil
+	}
 	fc.Filters = append(fc.Filters, filter)
 	return fc
 }
@@ -31,19 +38,22 @@ func (fc *FilterChain) Filter(name string) *FilterChain {
 	return fc
 }
 
-// Input sets input label for the chain (on the first filter)
+// Input sets input labels for the chain (on the first filter). Labels given
+// before any filter is added are attached to the first filter added.
 func (fc *FilterChain) Input(labels ...string) *FilterChain {
 	if len(fc.Filters) == 0 {
-		fc.Filters = append(fc.Filters, NewFilter("null")) // placeholder
+		fc.pendingInputs = append(fc.pendingInputs, labels...)
+		return fc
 	}
 	fc.Filters[0].InputLabels = append(fc.Filters[0].InputLabels, labels...)
 	return fc
 }
 
-// Output sets output label for the chain (on the last filter)
+// Output sets output labels for the chain (on the last filter). On an empty
+// chain a pass-through "null" filter is added to carry the labels.
 func (fc *FilterChain) Output(labels ...string) *FilterChain {
 	if len(fc.Filters) == 0 {
-		fc.Filters = append(fc.Filters, NewFilter("null")) // placeholder
+		fc.Add(NewFilter("null"))
 	}
 	lastIdx := len(fc.Filters) - 1
 	fc.Filters[lastIdx].OutputLabels = append(fc.Filters[lastIdx].OutputLabels, labels...)

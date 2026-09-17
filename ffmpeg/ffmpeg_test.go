@@ -7,104 +7,205 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/ophymx/muxmix/ffmpeg"
+	"github.com/ophymx/muxmix/ffprobe"
 )
 
 func writeFakeFFmpeg(t *testing.T, body string) string {
 	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("shell-script test")
+	}
 	path := filepath.Join(t.TempDir(), "fake-ffmpeg.sh")
 	script := "#!/usr/bin/env bash\nset -euo pipefail\n" + body + "\n"
 	if err := os.WriteFile(path, []byte(script), 0o700); err != nil {
-		t.Fatalf("failed to write fake ffmpeg script: %v", err)
+		t.Fatal(err)
 	}
 	return path
 }
 
-func TestRunnerRunWithOptionsSuccess(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("shell-script test")
-	}
-
+func TestRunProgressPipe(t *testing.T) {
 	fake := writeFakeFFmpeg(t, `
-echo "fake stdout" 
-printf 'frame=    1 fps=0.0 q=-0.0 size=N/A time=00:00:00.04 bitrate=N/A speed=N/A\r' >&2
-printf 'frame=  100 fps=25.0 q=20.0 Lsize=    200kB time=00:00:04.00 bitrate= 409.6kbits/s speed=1.00x\r' >&2
+echo "fake stdout"
+echo "some log line" >&2
+# -progress pipe:3 must be present and fd 3 open
+for a in "$@"; do [ "$a" = "pipe:3" ] && found=1; done
+[ "${found:-0}" = 1 ] || { echo "no progress pipe" >&2; exit 3; }
+printf 'frame=1\nout_time_us=40000\nprogress=continue\n' >&3
+printf 'frame=100\nout_time_us=4000000\ntotal_size=204800\nprogress=end\n' >&3
 `)
-
-	r := ffmpeg.New(ffmpeg.WithBinary(fake), ffmpeg.WithDefaultArgs())
-
-	var stats []ffmpeg.ProgressStat
-	result, err := r.RunWithOptions(context.Background(), ffmpeg.RunOptions{
-		Args: []string{"-i", "input.mp4", "output.mp4"},
-		OnProgress: func(s ffmpeg.ProgressStat) {
-			stats = append(stats, s)
-		},
-	})
+	r := ffmpeg.New(ffmpeg.WithBinary(fake))
+	var mu sync.Mutex
+	var updates []ffmpeg.Progress
+	cmd := ffmpeg.NewCommand().Input("input.mp4").Output("output.mp4")
+	res, err := r.Run(context.Background(), cmd, ffmpeg.OnProgress(func(p ffmpeg.Progress) {
+		mu.Lock()
+		updates = append(updates, p)
+		mu.Unlock()
+	}))
 	if err != nil {
-		t.Fatalf("RunWithOptions() error = %v", err)
+		t.Fatalf("Run: %v (stderr %q)", err, res.Stderr)
 	}
-
-	if result.ExitCode != 0 {
-		t.Fatalf("ExitCode = %d, want 0", result.ExitCode)
+	if res.ExitCode != 0 || string(res.Stdout) != "fake stdout\n" || !strings.Contains(string(res.Stderr), "some log line") {
+		t.Errorf("result = %+v", res)
 	}
-	if len(result.Args) != 3 {
-		t.Fatalf("len(Args) = %d, want 3", len(result.Args))
+	if len(updates) != 2 || !res.Progress.Done || res.Progress.Frame != 100 || res.Progress.Time != 4*time.Second || res.Progress.Size != 204800 {
+		t.Errorf("updates=%d last=%+v", len(updates), res.Progress)
 	}
-	if string(result.Stdout) == "" {
-		t.Fatal("Stdout was not captured")
-	}
-	if result.LastStat.Frame != 100 {
-		t.Fatalf("LastStat.Frame = %d, want 100", result.LastStat.Frame)
-	}
-	if !result.LastStat.Complete {
-		t.Fatal("LastStat.Complete = false, want true")
-	}
-	if len(stats) < 2 {
-		t.Fatalf("progress callback count = %d, want at least 2", len(stats))
+	want := []string{"-hide_banner", "-nostdin", "-loglevel", "error", "-y", "-progress", "pipe:3", "-i", "input.mp4", "output.mp4"}
+	if strings.Join(res.Args, " ") != strings.Join(want, " ") {
+		t.Errorf("args = %v", res.Args)
 	}
 }
 
-func TestRunnerRunWithOptionsFailure(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("shell-script test")
-	}
-
+func TestRunStatsFallback(t *testing.T) {
 	fake := writeFakeFFmpeg(t, `
-printf 'frame=  10 fps=10.0 q=25.0 size=     10kB time=00:00:01.00 bitrate=  81.9kbits/s speed=1.00x\r' >&2
-echo "simulated ffmpeg failure" >&2
-exit 5
+printf 'frame=    1 fps=0.0 q=-0.0 size=N/A time=00:00:00.04 bitrate=N/A speed=N/A\r' >&2
+printf 'frame=  100 fps=25.0 q=20.0 Lsize=    200kB time=00:00:04.00 bitrate= 409.6kbits/s speed=1.00x\r' >&2
 `)
+	r := ffmpeg.New(ffmpeg.WithBinary(fake))
+	var n int
+	res, err := r.RunArgs(context.Background(), []string{"-i", "in", "out"},
+		ffmpeg.OnProgress(func(p ffmpeg.Progress) { n++ }), ffmpeg.NoProgressPipe())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 2 || res.Progress.Frame != 100 || !res.Progress.Done {
+		t.Errorf("n=%d progress=%+v", n, res.Progress)
+	}
+	if !strings.Contains(strings.Join(res.Args, " "), "-stats -i in out") {
+		t.Errorf("args = %v", res.Args)
+	}
+}
 
-	r := ffmpeg.New(ffmpeg.WithBinary(fake), ffmpeg.WithDefaultArgs())
-	result, err := r.Run(context.Background(), "-i", "input.mp4", "output.mp4")
+func TestRunFailure(t *testing.T) {
+	fake := writeFakeFFmpeg(t, `
+echo "[in#0] Error opening input: No such file or directory" >&2
+echo "Error opening input file missing.mp4." >&2
+echo "Conversion failed!" >&2
+exit 254
+`)
+	r := ffmpeg.New(ffmpeg.WithBinary(fake))
+	res, err := r.Run(context.Background(), ffmpeg.NewCommand().Input("missing.mp4").Output("x.mp4"))
 	if err == nil {
-		t.Fatal("Run() error = nil, want non-nil")
+		t.Fatal("expected error")
 	}
+	var ferr *ffmpeg.Error
+	if !errors.As(err, &ferr) || ferr.Result != res || res.ExitCode != 254 {
+		t.Fatalf("err = %v, result = %+v", err, res)
+	}
+	if got := err.Error(); got != "ffmpeg exited with code 254: [in#0] Error opening input: No such file or directory; Error opening input file missing.mp4." {
+		t.Errorf("Error() = %q", got)
+	}
+	var exitErr interface{ ExitCode() int }
+	if !errors.As(err, &exitErr) {
+		t.Error("should unwrap to *exec.ExitError")
+	}
+}
 
-	var runErr *ffmpeg.Error
-	if !errors.As(err, &runErr) {
-		t.Fatalf("error type = %T, want *ffmpeg.Error", err)
+func TestRunReport(t *testing.T) {
+	fake := writeFakeFFmpeg(t, `
+case "$FFREPORT" in file=*) ;; *) echo "no FFREPORT: $FFREPORT" >&2; exit 2;; esac
+path=${FFREPORT#file=}; path=${path%%:level=*}; path=${path//\\:/:}
+echo "report body" > "$path"
+`)
+	r := ffmpeg.New(ffmpeg.WithBinary(fake))
+	res, err := r.RunArgs(context.Background(), []string{"-i", "in", "out"}, ffmpeg.Report(""))
+	if err != nil {
+		t.Fatal(err)
 	}
-	if runErr.Result == nil {
-		t.Fatal("runErr.Result = nil")
-	}
-	if result.ExitCode != 5 {
-		t.Fatalf("ExitCode = %d, want 5", result.ExitCode)
-	}
-	if len(result.Report) == 0 {
-		t.Fatal("Report is empty, expected stderr fallback")
-	}
-	if !strings.Contains(string(result.Report), "simulated ffmpeg failure") {
-		t.Fatalf("Report = %q, expected failure message", string(result.Report))
+	defer os.Remove(res.ReportPath)
+	if res.ReportPath == "" || string(res.Report) != "report body\n" {
+		t.Errorf("report = %q at %q", res.Report, res.ReportPath)
 	}
 }
 
 func TestValidateInstallUsesBinary(t *testing.T) {
 	r := ffmpeg.New(ffmpeg.WithBinary("definitely-missing-binary-12345"))
-	err := r.ValidateInstall()
+	if err := r.ValidateInstall(); !errors.Is(err, ffmpeg.ErrFFmpegNotFound) {
+		t.Fatalf("ValidateInstall() = %v", err)
+	}
+	_, err := r.Run(context.Background(), ffmpeg.NewCommand().Input("a").Output("b"))
 	if !errors.Is(err, ffmpeg.ErrFFmpegNotFound) {
-		t.Fatalf("ValidateInstall() error = %v, want ErrFFmpegNotFound", err)
+		t.Fatalf("Run() = %v", err)
+	}
+}
+
+// ─── live tests against a real ffmpeg ──────────────────────────────────────
+
+func requireFFmpeg(t *testing.T) {
+	t.Helper()
+	if err := ffmpeg.ValidateInstall(); err != nil {
+		t.Skip("ffmpeg not installed")
+	}
+}
+
+func TestLiveEncodeWithProgress(t *testing.T) {
+	requireFFmpeg(t)
+	out := filepath.Join(t.TempDir(), "out.mp4")
+	cmd := ffmpeg.NewCommand().
+		Input("testsrc2=size=64x64:rate=25:duration=2", ffmpeg.Lavfi()).
+		Input("sine=frequency=440:duration=2", ffmpeg.Lavfi()).
+		Output(out, ffmpeg.Map("0:v"), ffmpeg.Map("1:a"),
+			ffmpeg.VideoCodec("libx264"), ffmpeg.Preset("ultrafast"), ffmpeg.PixFmt("yuv420p"),
+			ffmpeg.AudioCodec("aac"), ffmpeg.Metadata("title", "live"), ffmpeg.MovFlags("+faststart"))
+	var updates int
+	res, err := ffmpeg.Run(context.Background(), cmd,
+		ffmpeg.OnProgress(func(p ffmpeg.Progress) { updates++ }),
+		ffmpeg.ProgressInterval(50*time.Millisecond))
+	if err != nil {
+		t.Fatalf("%v\n%s", err, res.Stderr)
+	}
+	if updates == 0 || !res.Progress.Done || res.Progress.Frame != 50 {
+		t.Errorf("updates=%d progress=%+v", updates, res.Progress)
+	}
+	info, err := ffprobe.Probe(context.Background(), out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.VideoStream() == nil || info.AudioStream() == nil || info.Format.Tags.Value("title") != "live" {
+		t.Errorf("probe = %+v", info)
+	}
+}
+
+func TestLiveCancelWritesTrailer(t *testing.T) {
+	requireFFmpeg(t)
+	out := filepath.Join(t.TempDir(), "out.mkv")
+	ctx, cancel := context.WithCancel(context.Background())
+	cmd := ffmpeg.NewCommand().
+		Input("testsrc2=size=64x64:rate=25", ffmpeg.Lavfi(), ffmpeg.ReadRate()).
+		Output(out, ffmpeg.VideoCodec("libx264"), ffmpeg.Preset("ultrafast"))
+	res, err := ffmpeg.Run(ctx, cmd, ffmpeg.OnProgress(func(p ffmpeg.Progress) {
+		if p.Time >= 500*time.Millisecond {
+			cancel()
+		}
+	}), ffmpeg.ProgressInterval(50*time.Millisecond))
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v\n%s", err, res.Stderr)
+	}
+	// SIGINT let ffmpeg finish the file: it must be probeable with a duration.
+	info, err := ffprobe.Probe(context.Background(), out)
+	if err != nil {
+		t.Fatalf("output after cancel is not readable: %v", err)
+	}
+	if d := info.Duration(); d < 300*time.Millisecond {
+		t.Errorf("duration after cancel = %v", d)
+	}
+}
+
+func TestLiveErrorAndVersion(t *testing.T) {
+	requireFFmpeg(t)
+	_, err := ffmpeg.Run(context.Background(), ffmpeg.NewCommand().Input(filepath.Join(t.TempDir(), "nope.mp4")).Output("-", ffmpeg.NullOutput()))
+	var ferr *ffmpeg.Error
+	if !errors.As(err, &ferr) || !strings.Contains(err.Error(), "nope.mp4") {
+		t.Errorf("err = %v", err)
+	}
+	v, err := ffmpeg.Version(context.Background())
+	if err != nil || v.Major < 4 || len(v.Libraries) == 0 {
+		t.Errorf("version = %+v %v", v, err)
 	}
 }

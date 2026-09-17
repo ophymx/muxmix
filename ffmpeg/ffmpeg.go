@@ -1,3 +1,22 @@
+// Package ffmpeg runs ffmpeg with structured commands, live progress and
+// useful errors.
+//
+//	cmd := ffmpeg.NewCommand().
+//		Input("in.mkv").
+//		Output("out.mp4", ffmpeg.VideoCodec("libx264"), ffmpeg.CRF(20), ffmpeg.AudioCodec("aac"))
+//
+//	res, err := ffmpeg.Run(ctx, cmd, ffmpeg.OnProgress(func(p ffmpeg.Progress) {
+//		fmt.Printf("\r%s %.1fx", p.Time, p.Speed)
+//	}))
+//
+// Progress comes from ffmpeg's -progress stream on a dedicated pipe, so it is
+// independent of the log level and immune to stderr formatting changes. On
+// platforms without inheritable pipes the stats line on stderr is parsed
+// instead.
+//
+// Cancelling the context sends ffmpeg SIGINT first, which lets it finish
+// writing the container trailer, and kills it only if it has not exited
+// within the grace period.
 package ffmpeg
 
 import (
@@ -17,98 +36,130 @@ var (
 	ErrFFmpegNotFound = errors.New("ffmpeg not found")
 )
 
-// RunOptions configures a single ffmpeg invocation.
-type RunOptions struct {
-	Args []string
-
-	Dir string
-	Env []string
-
-	Stdout io.Writer
-	Stderr io.Writer
-
-	OnProgress OnProgressFunc
-
-	DisableDefaultArgs bool
-	KeepReportFile     bool
+// Runner executes ffmpeg.
+type Runner interface {
+	// Run executes a Command with the runner's defaults applied.
+	Run(ctx context.Context, cmd *Command, opts ...RunOption) (*Result, error)
+	// RunArgs executes ffmpeg with exactly the given arguments.
+	RunArgs(ctx context.Context, args []string, opts ...RunOption) (*Result, error)
+	// Version reports the binary's version.
+	Version(ctx context.Context) (*VersionInfo, error)
+	// ValidateInstall reports ErrFFmpegNotFound when the binary is missing.
+	ValidateInstall() error
+	// Binary returns the executable path.
+	Binary() string
 }
 
-// Result describes one ffmpeg command execution.
+// Result describes one ffmpeg execution.
 type Result struct {
 	Binary   string
 	Args     []string
 	ExitCode int
 
-	StartAt  time.Time
-	EndAt    time.Time
-	Duration time.Duration
+	StartedAt  time.Time
+	FinishedAt time.Time
+	Duration   time.Duration
 
+	// Stdout holds captured standard output unless Stdout was redirected.
+	Stdout []byte
+	// Stderr holds ffmpeg's log output.
+	Stderr []byte
+	// Progress is the last progress update received.
+	Progress Progress
+
+	// ReportPath and Report are set when a report file was requested.
 	ReportPath string
 	Report     []byte
-
-	Stdout   []byte
-	Stderr   []byte
-	LastStat ProgressStat
 }
 
-// Error wraps ffmpeg execution failures with context and report output.
+// Error is returned when ffmpeg fails to start or exits unsuccessfully.
 type Error struct {
-	Cause   error
-	Result  *Result
-	Message string
+	Cause  error
+	Result *Result
 }
 
-func (err *Error) Error() string {
-	if err == nil {
+func (e *Error) Error() string {
+	if e == nil {
 		return "<nil>"
 	}
-	if err.Message != "" {
-		return err.Message
+	msg := "ffmpeg failed"
+	if e.Result != nil && e.Result.ExitCode != 0 {
+		msg = fmt.Sprintf("ffmpeg exited with code %d", e.Result.ExitCode)
 	}
-	if err.Result != nil && err.Result.ReportPath != "" {
-		return fmt.Sprintf("ffmpeg failed: %v (report: %s)", err.Cause, err.Result.ReportPath)
+	if e.Result != nil {
+		if tail := e.Result.errorTail(); tail != "" {
+			return msg + ": " + tail
+		}
 	}
-	return fmt.Sprintf("ffmpeg failed: %v", err.Cause)
+	if e.Cause != nil {
+		return msg + ": " + e.Cause.Error()
+	}
+	return msg
 }
 
-func (err *Error) Unwrap() error {
-	if err == nil {
-		return nil
+func (e *Error) Unwrap() error { return e.Cause }
+
+// LogLines returns stderr split into lines, without progress stats lines
+// and without the trailing "Conversion failed!" summary.
+func (r *Result) LogLines() []string {
+	raw := strings.FieldsFunc(string(r.Stderr), func(c rune) bool { return c == '\n' || c == '\r' })
+	var lines []string
+	for _, l := range raw {
+		l = strings.TrimSpace(l)
+		if l == "" || strings.HasPrefix(l, "frame=") || strings.HasPrefix(l, "size=") || l == "Conversion failed!" {
+			continue
+		}
+		lines = append(lines, l)
 	}
-	return err.Cause
+	return lines
 }
 
-// Runner provides a rich interface for executing ffmpeg commands.
-type Runner interface {
-	ValidateInstall() error
-	Run(ctx context.Context, args ...string) (*Result, error)
-	RunWithOptions(ctx context.Context, options RunOptions) (*Result, error)
-	RunWithRawArgs(fn OnProgressFunc, args ...string) error
+// LastLogLine returns the last meaningful line of stderr, which is normally
+// ffmpeg's error message.
+func (r *Result) LastLogLine() string {
+	lines := r.LogLines()
+	if len(lines) == 0 {
+		return ""
+	}
+	return lines[len(lines)-1]
 }
 
-// Option configures an ffmpeg runner instance.
+// errorTail returns the trailing run of error lines (at most two), since
+// newer ffmpeg prints a specific line followed by a generic summary.
+func (r *Result) errorTail() string {
+	lines := r.LogLines()
+	if len(lines) == 0 {
+		return ""
+	}
+	tail := []string{lines[len(lines)-1]}
+	if len(lines) > 1 {
+		prev := lines[len(lines)-2]
+		if strings.HasPrefix(strings.ToLower(prev), "error") || strings.HasPrefix(prev, "[") {
+			tail = []string{prev, tail[0]}
+		}
+	}
+	return strings.Join(tail, "; ")
+}
+
+// ─── runner construction ───────────────────────────────────────────────────
+
+// Option configures a Runner.
 type Option func(*runner)
 
 type runner struct {
-	binary      string
-	defaultArgs []string
-	stdout      io.Writer
-	stderr      io.Writer
-	env         []string
+	binary string
+	env    []string
+	stdout io.Writer
+	stderr io.Writer
+	grace  time.Duration
 }
 
-// DefaultRunner is the shared default ffmpeg runner.
+// DefaultRunner is the shared runner used by the package-level functions.
 var DefaultRunner Runner = New()
 
-// New creates a new ffmpeg runner with sensible defaults.
+// New creates a Runner.
 func New(options ...Option) Runner {
-	r := &runner{
-		binary:      "ffmpeg",
-		defaultArgs: []string{"-hide_banner", "-v", "quiet", "-y", "-stats"},
-		stdout:      os.Stdout,
-		stderr:      io.Discard,
-		env:         os.Environ(),
-	}
+	r := &runner{binary: "ffmpeg", grace: 5 * time.Second}
 	for _, opt := range options {
 		opt(r)
 	}
@@ -124,53 +175,123 @@ func WithBinary(binary string) Option {
 	}
 }
 
-// WithDefaultArgs replaces the default arguments prepended to each run.
-func WithDefaultArgs(args ...string) Option {
-	return func(r *runner) {
-		r.defaultArgs = append([]string(nil), args...)
-	}
-}
-
-// WithStdout sets default stdout forwarding.
-func WithStdout(w io.Writer) Option {
-	return func(r *runner) {
-		if w != nil {
-			r.stdout = w
-		}
-	}
-}
-
-// WithStderr sets default stderr forwarding of raw ffmpeg output.
-func WithStderr(w io.Writer) Option {
-	return func(r *runner) {
-		if w != nil {
-			r.stderr = w
-		}
-	}
-}
-
-// WithEnv sets default command environment.
+// WithEnv replaces the process environment for ffmpeg runs.
 func WithEnv(env ...string) Option {
-	return func(r *runner) {
-		r.env = append([]string(nil), env...)
-	}
+	return func(r *runner) { r.env = append([]string(nil), env...) }
 }
 
-func ValidateInstall() error {
-	return DefaultRunner.ValidateInstall()
+// WithStdout forwards ffmpeg's stdout to w on every run, in addition to
+// capturing it.
+func WithStdout(w io.Writer) Option {
+	return func(r *runner) { r.stdout = w }
 }
 
-func Run(ctx context.Context, args ...string) (*Result, error) {
-	return DefaultRunner.Run(ctx, args...)
+// WithStderr forwards ffmpeg's log output to w on every run, in addition to
+// capturing it.
+func WithStderr(w io.Writer) Option {
+	return func(r *runner) { r.stderr = w }
 }
 
-func RunWithOptions(ctx context.Context, options RunOptions) (*Result, error) {
-	return DefaultRunner.RunWithOptions(ctx, options)
+// WithGrace sets how long a cancelled ffmpeg gets to exit after SIGINT
+// before it is killed (default 5s).
+func WithGrace(d time.Duration) Option {
+	return func(r *runner) { r.grace = d }
 }
 
-func RunWithRawArgs(fn OnProgressFunc, args ...string) error {
-	return DefaultRunner.RunWithRawArgs(fn, args...)
+// ─── run options ───────────────────────────────────────────────────────────
+
+// RunOption configures a single run.
+type RunOption func(*runConfig)
+
+type runConfig struct {
+	onProgress     func(Progress)
+	stdin          io.Reader
+	stdout         io.Writer
+	stderr         io.Writer
+	dir            string
+	env            []string
+	report         bool
+	reportPath     string
+	interval       time.Duration
+	noProgressPipe bool
+	noDefaults     bool
 }
+
+// OnProgress receives progress updates while ffmpeg runs. It is called from
+// a separate goroutine; the final update has Done set.
+func OnProgress(fn func(Progress)) RunOption {
+	return func(c *runConfig) { c.onProgress = fn }
+}
+
+// Stdin connects r to ffmpeg's standard input, for inputs read from pipe:0.
+func Stdin(r io.Reader) RunOption {
+	return func(c *runConfig) { c.stdin = r }
+}
+
+// Stdout sends ffmpeg's standard output to w instead of capturing it. Use it
+// when an output URL is pipe:1.
+func Stdout(w io.Writer) RunOption {
+	return func(c *runConfig) { c.stdout = w }
+}
+
+// Stderr additionally forwards ffmpeg's log output to w for this run.
+func Stderr(w io.Writer) RunOption {
+	return func(c *runConfig) { c.stderr = w }
+}
+
+// Dir sets the working directory for the run.
+func Dir(dir string) RunOption {
+	return func(c *runConfig) { c.dir = dir }
+}
+
+// Env appends environment variables for the run.
+func Env(kv ...string) RunOption {
+	return func(c *runConfig) { c.env = append(c.env, kv...) }
+}
+
+// Report asks ffmpeg for a full log via FFREPORT. With an empty path a
+// temporary file is used; its path is returned in Result.ReportPath and its
+// contents in Result.Report. The caller removes the file.
+func Report(path string) RunOption {
+	return func(c *runConfig) { c.report = true; c.reportPath = path }
+}
+
+// ProgressInterval sets how often progress is reported (-stats_period,
+// default 0.5s).
+func ProgressInterval(d time.Duration) RunOption {
+	return func(c *runConfig) { c.interval = d }
+}
+
+// NoProgressPipe forces progress parsing from the stderr stats line instead
+// of a dedicated pipe.
+func NoProgressPipe() RunOption {
+	return func(c *runConfig) { c.noProgressPipe = true }
+}
+
+// NoDefaultArgs runs the Command exactly as rendered, without the runner's
+// -hide_banner, -nostdin, -loglevel and -y defaults.
+func NoDefaultArgs() RunOption {
+	return func(c *runConfig) { c.noDefaults = true }
+}
+
+// ─── package-level helpers ─────────────────────────────────────────────────
+
+// Run executes cmd on the default runner.
+func Run(ctx context.Context, cmd *Command, opts ...RunOption) (*Result, error) {
+	return DefaultRunner.Run(ctx, cmd, opts...)
+}
+
+// RunArgs executes raw arguments on the default runner.
+func RunArgs(ctx context.Context, args []string, opts ...RunOption) (*Result, error) {
+	return DefaultRunner.RunArgs(ctx, args, opts...)
+}
+
+// ValidateInstall checks the default runner's binary.
+func ValidateInstall() error { return DefaultRunner.ValidateInstall() }
+
+// ─── execution ─────────────────────────────────────────────────────────────
+
+func (r *runner) Binary() string { return r.binary }
 
 func (r *runner) ValidateInstall() error {
 	if _, err := exec.LookPath(r.binary); err != nil {
@@ -179,144 +300,222 @@ func (r *runner) ValidateInstall() error {
 	return nil
 }
 
-func (r *runner) Run(ctx context.Context, args ...string) (*Result, error) {
-	return r.RunWithOptions(ctx, RunOptions{Args: args})
+func (r *runner) Run(ctx context.Context, cmd *Command, opts ...RunOption) (*Result, error) {
+	if err := cmd.Validate(); err != nil {
+		return nil, err
+	}
+	var c runConfig
+	for _, o := range opts {
+		o(&c)
+	}
+	var args []string
+	if !c.noDefaults {
+		args = append(args, "-hide_banner", "-nostdin")
+		if !cmd.Global.Has("loglevel") && !cmd.Global.Has("v") {
+			args = append(args, "-loglevel", "error")
+		}
+		if !cmd.Global.Has("y") && !cmd.Global.Has("n") {
+			args = append(args, "-y")
+		}
+	}
+	args = append(args, cmd.Args()...)
+	return r.run(ctx, args, &c)
 }
 
-func (r *runner) RunWithRawArgs(fn OnProgressFunc, args ...string) error {
-	_, err := r.RunWithOptions(context.Background(), RunOptions{
-		Args:       args,
-		OnProgress: fn,
-	})
-	return err
+func (r *runner) RunArgs(ctx context.Context, args []string, opts ...RunOption) (*Result, error) {
+	var c runConfig
+	for _, o := range opts {
+		o(&c)
+	}
+	return r.run(ctx, append([]string(nil), args...), &c)
 }
 
-func (r *runner) RunWithOptions(ctx context.Context, options RunOptions) (*Result, error) {
+func (r *runner) run(ctx context.Context, args []string, c *runConfig) (*Result, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-
-	result := &Result{
-		Binary:  r.binary,
-		StartAt: time.Now(),
+	res := &Result{Binary: r.binary, StartedAt: time.Now()}
+	finish := func(err error) (*Result, error) {
+		res.FinishedAt = time.Now()
+		res.Duration = res.FinishedAt.Sub(res.StartedAt)
+		if err != nil {
+			return res, &Error{Cause: err, Result: res}
+		}
+		return res, nil
 	}
 
-	args := make([]string, 0, len(r.defaultArgs)+len(options.Args))
-	if !options.DisableDefaultArgs {
-		args = append(args, r.defaultArgs...)
+	// Progress transport: a dedicated pipe when supported, else -stats on stderr.
+	var progressPipe *os.File // our read end
+	var progressChild *os.File
+	usePipe := c.onProgress != nil && !c.noProgressPipe && supportsExtraFiles()
+	if c.onProgress != nil {
+		if c.interval > 0 {
+			args = insertBeforeFirstInput(args, "-stats_period", formatSeconds(c.interval))
+		}
+		if usePipe {
+			pr, pw, err := os.Pipe()
+			if err != nil {
+				return finish(err)
+			}
+			progressPipe, progressChild = pr, pw
+			args = insertBeforeFirstInput(args, "-progress", "pipe:3")
+		} else {
+			args = insertBeforeFirstInput(args, "-stats")
+		}
 	}
-	args = append(args, options.Args...)
-	result.Args = append([]string(nil), args...)
+	res.Args = args
 
 	cmd := exec.CommandContext(ctx, r.binary, args...)
-	if options.Dir != "" {
-		cmd.Dir = options.Dir
+	cmd.Dir = c.dir
+	cmd.Cancel = func() error { return interrupt(cmd.Process) }
+	cmd.WaitDelay = r.grace
+	if c.stdin != nil {
+		cmd.Stdin = c.stdin
 	}
-
-	stdoutBuf := &bytes.Buffer{}
-	cmd.Stdout = io.MultiWriter(selectWriter(options.Stdout, r.stdout), stdoutBuf)
-
-	pipe, err := cmd.StderrPipe()
-	if err != nil {
-		result.EndAt = time.Now()
-		result.Duration = result.EndAt.Sub(result.StartAt)
-		return result, &Error{Cause: err, Result: result}
+	env := r.env
+	if env == nil {
+		env = os.Environ()
 	}
-
-	reportPath, err := tempReportFile()
-	if err != nil {
-		result.EndAt = time.Now()
-		result.Duration = result.EndAt.Sub(result.StartAt)
-		return result, &Error{Cause: err, Result: result}
+	env = append(append([]string(nil), env...), c.env...)
+	if c.report {
+		path := c.reportPath
+		if path == "" {
+			f, err := os.CreateTemp("", "ffmpeg-report-*.log")
+			if err != nil {
+				return finish(err)
+			}
+			path = f.Name()
+			f.Close()
+		}
+		res.ReportPath = path
+		env = append(env, "FFREPORT=file="+escapeReportPath(path)+":level=32")
 	}
-	result.ReportPath = reportPath
-	if !options.KeepReportFile {
-		defer os.Remove(reportPath)
-	}
-
-	env := append([]string(nil), r.env...)
-	env = append(env, options.Env...)
-	env = append(env, fmt.Sprintf("FFREPORT=file=%s:level=32", reportPath))
 	cmd.Env = env
 
-	stderrBuf := &bytes.Buffer{}
-	rawStderr := io.MultiWriter(stderrBuf, selectWriter(options.Stderr, r.stderr))
-	parser := NewStatParser(io.TeeReader(pipe, rawStderr))
+	var stdoutBuf, stderrBuf bytes.Buffer
+	if c.stdout != nil {
+		cmd.Stdout = c.stdout
+	} else if r.stdout != nil {
+		cmd.Stdout = io.MultiWriter(&stdoutBuf, r.stdout)
+	} else {
+		cmd.Stdout = &stdoutBuf
+	}
+	var stderrWriters []io.Writer
+	stderrWriters = append(stderrWriters, &stderrBuf)
+	if r.stderr != nil {
+		stderrWriters = append(stderrWriters, r.stderr)
+	}
+	if c.stderr != nil {
+		stderrWriters = append(stderrWriters, c.stderr)
+	}
+	stderrSink := io.MultiWriter(stderrWriters...)
+
+	// Progress readers run in their own goroutine and signal on done.
+	done := make(chan struct{})
+	deliver := func(p Progress) {
+		res.Progress = p
+		if c.onProgress != nil {
+			c.onProgress(p)
+		}
+	}
+	switch {
+	case usePipe:
+		cmd.Stderr = stderrSink
+		cmd.ExtraFiles = []*os.File{progressChild}
+		go func() {
+			defer close(done)
+			pr := NewProgressReader(progressPipe)
+			for {
+				p, err := pr.Read()
+				if err != nil {
+					return
+				}
+				deliver(p)
+			}
+		}()
+	case c.onProgress != nil:
+		pipe, err := cmd.StderrPipe()
+		if err != nil {
+			return finish(err)
+		}
+		go func() {
+			defer close(done)
+			sr := NewStatsReader(io.TeeReader(pipe, stderrSink))
+			for {
+				p, err := sr.Read()
+				if err != nil {
+					return
+				}
+				deliver(p)
+			}
+		}()
+	default:
+		cmd.Stderr = stderrSink
+		close(done)
+	}
 
 	if err := cmd.Start(); err != nil {
-		result.EndAt = time.Now()
-		result.Duration = result.EndAt.Sub(result.StartAt)
-		return result, &Error{Cause: fmt.Errorf("failed to start ffmpeg: %w", err), Result: result}
-	}
-
-	if options.OnProgress != nil {
-		options.OnProgress(ProgressStat{})
-	}
-
-	for {
-		stat, readErr := parser.Read()
-		if readErr == nil {
-			result.LastStat = stat
-			if options.OnProgress != nil {
-				options.OnProgress(stat)
-			}
-			continue
+		if progressChild != nil {
+			progressChild.Close()
+			progressPipe.Close()
 		}
-		if errors.Is(readErr, io.EOF) {
-			break
+		if errors.Is(err, exec.ErrNotFound) {
+			return finish(ErrFFmpegNotFound)
 		}
-
-		_ = cmd.Wait()
-		result.EndAt = time.Now()
-		result.Duration = result.EndAt.Sub(result.StartAt)
-		result.Stdout = stdoutBuf.Bytes()
-		result.Stderr = stderrBuf.Bytes()
-		result.Report = readReport(reportPath, result.Stderr)
-		return result, &Error{Cause: readErr, Result: result}
+		return finish(err)
+	}
+	if progressChild != nil {
+		progressChild.Close() // child holds its own copy
 	}
 
 	waitErr := cmd.Wait()
-	result.EndAt = time.Now()
-	result.Duration = result.EndAt.Sub(result.StartAt)
-	result.Stdout = stdoutBuf.Bytes()
-	result.Stderr = stderrBuf.Bytes()
-	result.Report = readReport(reportPath, result.Stderr)
+	if progressPipe != nil {
+		// Wait already reaped the child, so the pipe has hit EOF; make sure
+		// the reader goroutine sees it even if ffmpeg leaked the fd.
+		<-done
+		progressPipe.Close()
+	} else {
+		<-done
+	}
 
+	res.Stdout = stdoutBuf.Bytes()
+	res.Stderr = stderrBuf.Bytes()
 	if cmd.ProcessState != nil {
-		result.ExitCode = cmd.ProcessState.ExitCode()
+		res.ExitCode = cmd.ProcessState.ExitCode()
 	}
-
+	if res.ReportPath != "" {
+		res.Report, _ = os.ReadFile(res.ReportPath)
+	}
 	if waitErr != nil {
-		return result, &Error{Cause: waitErr, Result: result}
+		if ctx.Err() != nil {
+			return finish(ctx.Err())
+		}
+		return finish(waitErr)
 	}
-	return result, nil
+	return finish(nil)
 }
 
-func selectWriter(preferred io.Writer, fallback io.Writer) io.Writer {
-	if preferred != nil {
-		return preferred
+// insertBeforeFirstInput places global options ahead of the first -i so
+// they apply to the whole run regardless of how args were built.
+func insertBeforeFirstInput(args []string, opt ...string) []string {
+	for i, a := range args {
+		if a == "-i" {
+			out := make([]string, 0, len(args)+len(opt))
+			out = append(out, args[:i]...)
+			out = append(out, opt...)
+			out = append(out, args[i:]...)
+			return out
+		}
 	}
-	if fallback != nil {
-		return fallback
-	}
-	return io.Discard
+	return append(args, opt...)
 }
 
-func tempReportFile() (string, error) {
-	f, err := os.CreateTemp("", "ffmpeg-report-")
-	if err != nil {
-		return "", err
-	}
-	return f.Name(), f.Close()
+func formatSeconds(d time.Duration) string {
+	return fmt.Sprintf("%.3f", d.Seconds())
 }
 
-func readReport(reportPath string, fallback []byte) []byte {
-	b, err := os.ReadFile(reportPath)
-	if err == nil && len(b) > 0 {
-		return b
-	}
-	if len(fallback) == 0 {
-		return nil
-	}
-	return []byte(strings.TrimSpace(string(fallback)))
+// escapeReportPath escapes the characters FFREPORT treats specially.
+func escapeReportPath(p string) string {
+	r := strings.NewReplacer(`\`, `\\`, `:`, `\:`)
+	return r.Replace(p)
 }

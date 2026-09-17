@@ -570,8 +570,11 @@ func TestJSONSerialization(t *testing.T) {
 		t.Errorf("Expected 1 chain, got %d", len(g2.Chains))
 	}
 
-	if len(g2.Chains[0].Filters) != 3 { // scale, fps, and implicit filter for input/output
-		t.Errorf("Expected 3 filters, got %d", len(g2.Chains[0].Filters))
+	if len(g2.Chains[0].Filters) != 2 {
+		t.Errorf("Expected 2 filters, got %d", len(g2.Chains[0].Filters))
+	}
+	if want := "[0:v]scale=h=1080:w=1920,fps=fps=30.00[output]"; g2.String() != want {
+		t.Errorf("round-tripped graph = %q, want %q", g2.String(), want)
 	}
 }
 

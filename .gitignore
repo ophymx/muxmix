@@ -3,3 +3,5 @@
 *.test
 coverage.out
 vendor/
+matrix/*.log
+matrix/*/build.err

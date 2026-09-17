@@ -66,10 +66,7 @@ func Probe(ctx context.Context, runner baseffmpeg.Runner, kind Kind, device stri
 	}
 	probe.Args = append([]string(nil), args...)
 
-	result, runErr := runner.RunWithOptions(ctx, baseffmpeg.RunOptions{
-		Args:               args,
-		DisableDefaultArgs: true,
-	})
+	result, runErr := runner.RunArgs(ctx, args)
 	if runErr != nil {
 		probe.Error = formatProbeError(runErr, result)
 		return probe

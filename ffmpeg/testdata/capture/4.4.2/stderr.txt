@@ -1,0 +1,48 @@
+ffmpeg stats and -progress period set to 0.05.
+Input #0, lavfi, from 'testsrc2=size=320x240:rate=25:duration=4':
+  Duration: N/A, start: 0.000000, bitrate: N/A
+  Stream #0:0: Video: rawvideo (I420 / 0x30323449), yuv420p, 320x240 [SAR 1:1 DAR 4:3], 25 tbr, 25 tbn, 25 tbc
+Input #1, lavfi, from 'sine=duration=4':
+  Duration: N/A, start: 0.000000, bitrate: 705 kb/s
+  Stream #1:0: Audio: pcm_s16le, 44100 Hz, mono, s16, 705 kb/s
+Stream mapping:
+  Stream #0:0 -> #0:0 (rawvideo (native) -> h264 (libx264))
+  Stream #1:0 -> #0:1 (pcm_s16le (native) -> aac (native))
+[libx264 @ 0x55a30a0d7900] using SAR=1/1
+[libx264 @ 0x55a30a0d7900] using cpu capabilities: MMX2 SSE2Fast SSSE3 SSE4.2
+[libx264 @ 0x55a30a0d7900] profile High, level 2.2, 4:2:0, 8-bit
+[libx264 @ 0x55a30a0d7900] 264 - core 163 r3060 5db6aa6 - H.264/MPEG-4 AVC codec - Copyleft 2003-2021 - http://www.videolan.org/x264.html - options: cabac=1 ref=16 deblock=1:0:0 analyse=0x3:0x133 me=umh subme=10 psy=1 psy_rd=1.00:0.00 mixed_ref=1 me_range=24 chroma_me=1 trellis=2 8x8dct=1 cqm=0 deadzone=21,11 fast_pskip=1 chroma_qp_offset=-2 threads=7 lookahead_threads=1 sliced_threads=0 nr=0 decimate=1 interlaced=0 bluray_compat=0 constrained_intra=0 bframes=8 b_pyramid=2 b_adapt=2 b_bias=0 direct=3 weightb=1 open_gop=0 weightp=2 keyint=250 keyint_min=25 scenecut=40 intra_refresh=0 rc_lookahead=60 rc=crf mbtree=1 crf=23.0 qcomp=0.60 qpmin=0 qpmax=69 qpstep=4 ip_ratio=1.40 aq=1:1.00
+Output #0, mp4, to '/tmp/tmp.ABonUYLW2b/out.mp4':
+  Metadata:
+    encoder         : Lavf58.76.100
+  Stream #0:0: Video: h264 (avc1 / 0x31637661), yuv420p(progressive), 320x240 [SAR 1:1 DAR 4:3], q=2-31, 25 fps, 12800 tbn
+    Metadata:
+      encoder         : Lavc58.134.100 libx264
+    Side data:
+      cpb: bitrate max/min/avg: 0/0/0 buffer size: 0 vbv_delay: N/A
+  Stream #0:1: Audio: aac (LC) (mp4a / 0x6134706D), 44100 Hz, mono, fltp, 69 kb/s
+    Metadata:
+      encoder         : Lavc58.134.100 aac
+frame=    1 fps=0.0 q=0.0 size=       0kB time=00:00:00.00 bitrate=N/A speed=   0x    frame=   72 fps=0.0 q=0.0 size=       0kB time=00:00:00.00 bitrate=N/A speed=   0x    frame=   79 fps=0.0 q=28.0 size=       0kB time=00:00:00.00 bitrate=4923.1kbits/s speed=0.000228x    frame=   86 fps=0.0 q=28.0 size=       0kB time=00:00:00.28 bitrate=   1.4kbits/s speed=0.713x    frame=   93 fps=0.0 q=28.0 size=       0kB time=00:00:00.56 bitrate=   0.7kbits/s speed=1.26x    frame=   99 fps=0.0 q=28.0 size=       0kB time=00:00:00.80 bitrate=   0.5kbits/s speed=1.61x    frame=  100 fps=0.0 q=28.0 size=       0kB time=00:00:02.50 bitrate=   0.2kbits/s speed=4.59x    [Parsed_sine_0 @ 0x55a30a0c12c0] EOF timestamp not reliable
+frame=  100 fps= 85 q=-1.0 Lsize=     152kB time=00:00:03.99 bitrate= 311.6kbits/s speed=3.38x    
+video:111kB audio:36kB subtitle:0kB other streams:0kB global headers:0kB muxing overhead: 3.097374%
+[libx264 @ 0x55a30a0d7900] frame I:1     Avg QP:22.26  size:  4271
+[libx264 @ 0x55a30a0d7900] frame P:29    Avg QP:28.05  size:  1555
+[libx264 @ 0x55a30a0d7900] frame B:70    Avg QP:33.60  size:   914
+[libx264 @ 0x55a30a0d7900] consecutive B-frames:  6.0%  2.0% 21.0% 44.0% 15.0% 12.0%  0.0%  0.0%  0.0%
+[libx264 @ 0x55a30a0d7900] mb I  I16..4: 24.3% 55.7% 20.0%
+[libx264 @ 0x55a30a0d7900] mb P  I16..4:  1.8%  4.6%  0.3%  P16..4: 15.7%  7.2%  7.7%  1.1%  0.4%    skip:61.1%
+[libx264 @ 0x55a30a0d7900] mb B  I16..4:  0.1%  0.6%  0.0%  B16..8: 20.0%  8.4%  4.1%  direct: 1.8%  skip:65.0%  L0:58.2% L1:38.0% BI: 3.8%
+[libx264 @ 0x55a30a0d7900] 8x8 transform intra:66.7% inter:17.4%
+[libx264 @ 0x55a30a0d7900] direct mvs  spatial:95.7% temporal:4.3%
+[libx264 @ 0x55a30a0d7900] coded y,uvDC,uvAC intra: 6.2% 15.7% 13.9% inter: 4.2% 12.0% 10.3%
+[libx264 @ 0x55a30a0d7900] i16 v,h,dc,p: 76% 21%  3%  0%
+[libx264 @ 0x55a30a0d7900] i8 v,h,dc,ddl,ddr,vr,hd,vl,hu: 11%  7% 81%  0%  0%  0%  0%  0%  1%
+[libx264 @ 0x55a30a0d7900] i4 v,h,dc,ddl,ddr,vr,hd,vl,hu: 50% 21% 24%  0%  0%  0%  1%  1%  3%
+[libx264 @ 0x55a30a0d7900] i8c dc,h,v,p: 59% 16% 25%  0%
+[libx264 @ 0x55a30a0d7900] Weighted P-Frames: Y:0.0% UV:0.0%
+[libx264 @ 0x55a30a0d7900] ref P L0: 53.3%  4.3% 11.5%  5.4%  5.3%  3.5%  3.3%  2.0%  1.7%  2.0%  1.7%  1.2%  1.4%  1.2%  1.2%  0.9%
+[libx264 @ 0x55a30a0d7900] ref B L0: 59.6% 13.7%  6.1%  2.7%  2.9%  3.4%  2.1%  1.5%  1.6%  1.2%  1.4%  1.3%  1.5%  0.9%  0.2%
+[libx264 @ 0x55a30a0d7900] ref B L1: 92.7%  7.3%
+[libx264 @ 0x55a30a0d7900] kb/s:226.77
+[aac @ 0x55a30a0d9840] Qavg: 539.624

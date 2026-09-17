@@ -86,7 +86,7 @@ EOF
 esac
 `)
 
-	runner := baseffmpeg.New(baseffmpeg.WithBinary(fake), baseffmpeg.WithDefaultArgs())
+	runner := baseffmpeg.New(baseffmpeg.WithBinary(fake))
 	support, err := Detect(context.Background(), runner)
 	if err != nil {
 		t.Fatalf("Detect() error = %v", err)
@@ -202,7 +202,7 @@ echo "unexpected args: $*" >&2
 exit 1
 `)
 
-	runner := baseffmpeg.New(baseffmpeg.WithBinary(fake), baseffmpeg.WithDefaultArgs())
+	runner := baseffmpeg.New(baseffmpeg.WithBinary(fake))
 	system, err := DetectSystem(context.Background(), runner, ProbeOptions{
 		Kinds: []Kind{QSV, VAAPI},
 		Devices: map[Kind][]string{
@@ -251,7 +251,7 @@ echo "forced failure: $*" >&2
 exit 2
 `)
 
-	runner := baseffmpeg.New(baseffmpeg.WithBinary(fake), baseffmpeg.WithDefaultArgs())
+	runner := baseffmpeg.New(baseffmpeg.WithBinary(fake))
 	probe := Probe(context.Background(), runner, CUDA, "0")
 	if probe.Available {
 		t.Fatal("expected probe failure")

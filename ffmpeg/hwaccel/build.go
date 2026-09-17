@@ -3,6 +3,8 @@ package hwaccel
 import (
 	"fmt"
 	"strings"
+
+	baseffmpeg "github.com/ophymx/muxmix/ffmpeg"
 )
 
 func BuildInputArgs(kind Kind, device string) ([]string, error) {
@@ -147,4 +149,36 @@ func lookupCodec(codec string, mapping map[string]string) (string, error) {
 		return "", fmt.Errorf("codec %q is not supported", codec)
 	}
 	return encoder, nil
+}
+
+// InputOpt returns the input options for a backend as an ffmpeg.Opt, for
+// use with ffmpeg.Command:
+//
+//	cmd.Input(path, hwaccel.InputOpt(kind, device))
+func InputOpt(kind Kind, device string) baseffmpeg.Opt {
+	args, err := BuildInputArgs(kind, device)
+	if err != nil || len(args) == 0 {
+		return func(*baseffmpeg.Options) {}
+	}
+	return baseffmpeg.Raw(args...)
+}
+
+// EncodeOpt returns the output options (-vf and -c:v) for encoding with a
+// backend as an ffmpeg.Opt. Errors are reported through the returned error
+// rather than silently producing an empty option.
+func EncodeOpt(kind Kind, codec string, filters ...string) (baseffmpeg.Opt, error) {
+	filter, err := BuildFilter(kind, filters...)
+	if err != nil {
+		return nil, err
+	}
+	videoCodec, err := BuildVideoCodec(kind, codec)
+	if err != nil {
+		return nil, err
+	}
+	return func(o *baseffmpeg.Options) {
+		if filter != "" {
+			o.Add(baseffmpeg.VideoFilter(filter))
+		}
+		o.Add(baseffmpeg.VideoCodec(videoCodec))
+	}, nil
 }

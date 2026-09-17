@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -23,8 +24,14 @@ func (args namedArgs) String() string {
 		return ""
 	}
 
+	keys := make([]string, 0, len(args))
+	for key := range args {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
 	argStrs := make([]string, 0, len(args))
-	for key, value := range args {
+	for _, key := range keys {
+		value := args[key]
 		if value == "" {
 			argStrs = append(argStrs, escapeFilterArg(key))
 		} else {

@@ -52,18 +52,27 @@ func ParseTimeSpec(value string) (TimeSpec, error) {
 		time.Duration(second*float64(time.Second))) * sign), nil
 }
 
+// String formats the value as HH:MM:SS.frac, which every ffmpeg time option
+// accepts. The fraction keeps whatever precision the value has, down to
+// microseconds, with at least two digits.
 func (ts TimeSpec) String() string {
 	dur := time.Duration(ts)
 	sign := ""
-	if ts < 0 {
+	if dur < 0 {
 		sign = "-"
-		dur *= -1
+		dur = -dur
 	}
 	hours := dur / time.Hour
-	dur = dur - hours*time.Hour
+	dur -= hours * time.Hour
 	minutes := dur / time.Minute
-	seconds := (dur - minutes*time.Minute).Seconds()
-	return fmt.Sprintf("%s%02d:%02d:%05.2f", sign, hours, minutes, seconds)
+	dur -= minutes * time.Minute
+	seconds := dur / time.Second
+	micros := (dur - seconds*time.Second) / time.Microsecond
+	frac := fmt.Sprintf("%06d", micros)
+	for len(frac) > 2 && frac[len(frac)-1] == '0' {
+		frac = frac[:len(frac)-1]
+	}
+	return fmt.Sprintf("%s%02d:%02d:%02d.%s", sign, hours, minutes, seconds, frac)
 }
 
 func (ts TimeSpec) MarshalJSON() ([]byte, error) {

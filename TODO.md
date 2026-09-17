@@ -9,35 +9,18 @@ helpers in `ffprobe/helpers.go`. Remaining ffprobe follow-ups:
   Content light level, Skip Samples) instead of reading `SideData.Extra` by key.
 - A `Sections` query (`ffprobe -sections`) so callers can feature-detect a binary at runtime.
 
-## 2. hwaccel: consolidated arg builder
+## 2. hwaccel: consolidated arg builder (done)
 
-Building a hardware-accelerated FFmpeg invocation currently requires three separate calls:
-
-```go
-inputArgs, _ := hwaccel.BuildInputArgs(kind, device)
-vf, _        := hwaccel.BuildFilter(kind)
-vc, _        := hwaccel.BuildVideoCodec(kind, codec)
-```
-
-Each returns independently, the caller must assemble them, and the conditional `-vf` insertion
-is repetitive. `SystemSupport.Select` already exists for choosing a backend; there should be a
-matching function that turns the selection into ready-to-use arg fragments:
-
-```go
-type HWArgs struct {
-    Input  []string // pre-input device args
-    Filter string   // -vf value, empty if none
-    Codec  string   // encoder name
-}
-
-func BuildHWArgs(kind Kind, device, codec string, extraFilters ...string) (HWArgs, error)
-```
+`hwaccel.InputOpt(kind, device)` and `hwaccel.EncodeOpt(kind, codec, filters...)` return
+`ffmpeg.Opt` values that plug straight into `ffmpeg.Command`; `BuildEncodeArgs` remains for
+raw argument lists.
 
 ## 3. ffmpeg: higher-level codec builder (in progress)
 
-The `ffmpeg` package has `RunWithRawArgs`, which is flexible but pushes full arg-list
-construction into callers. Every transcoding command re-encodes the same knowledge about
-bitrate flags, pass-log conventions, and pixel formats.
+`ffmpeg.Command` now models inputs, outputs, maps and options, and the option constructors
+cover the common encoder knobs. What is still missing is the codec-specific layer above it:
+per-encoder presets and rate-control profiles, two-pass orchestration, and validation of
+option values against what the installed build supports.
 
 Transcoder commands outside of this repository are currently being used to experiment with what
 codec-specific builder APIs should look like before anything is added here. Once patterns

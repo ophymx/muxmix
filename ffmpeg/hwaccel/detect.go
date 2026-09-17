@@ -71,10 +71,7 @@ func ParseVideoEncoders(output string) map[string]bool {
 }
 
 func runDetectCommand(ctx context.Context, runner baseffmpeg.Runner, args ...string) (string, error) {
-	result, err := runner.RunWithOptions(ctx, baseffmpeg.RunOptions{
-		Args:               args,
-		DisableDefaultArgs: true,
-	})
+	result, err := runner.RunArgs(ctx, args)
 	if err != nil {
 		return "", err
 	}
