@@ -1,193 +1,99 @@
-HWAccel Package
-===============
+# hwaccel
 
-This package helps answer two different questions about FFmpeg hardware acceleration:
+What hardware acceleration this machine can actually use, and how to ask
+for it.
 
-1. What hardware acceleration backends and encoders was this FFmpeg binary built with?
-2. Which of those backends can actually be initialized and used on the current machine?
+`ffmpeg -hwaccels` only says what the binary was compiled with. Whether a
+backend works depends on the driver stack, device nodes, permissions and
+runtime libraries on the host, so this package initialises each backend
+for real by running a tiny pipeline, and records what happened.
 
-That distinction matters because `ffmpeg -hwaccels` only reports compiled-in libraries. It does not prove that the host has the right driver stack, device nodes, permissions, or runtime libraries needed to use a backend successfully.
-
-What The Package Does
----------------------
-
-The package is split into two layers.
-
-### Build-Time Detection
-
-`Detect` runs FFmpeg discovery commands and parses their output into a `Support` value.
-
-- `-hwaccels` is parsed into supported backend kinds such as `vaapi`, `cuda`, `qsv`, and `videotoolbox`
-- `-encoders` is parsed into the available video encoder names
-
-This answers whether the FFmpeg binary knows about a backend and whether codec-specific encoders such as `h264_vaapi` or `hevc_nvenc` exist.
-
-### Runtime Detection
-
-`DetectSystem` builds on `Detect` and then runs backend-specific probe commands through FFmpeg itself.
-
-Each probe attempts to initialize a hardware device and execute a tiny synthetic pipeline. A backend is considered usable only if that probe succeeds.
-
-For example:
-
-- `vaapi` is probed with `-init_hw_device vaapi=...` and a small `hwupload` pipeline
-- `cuda` is probed with `-init_hw_device cuda=...` and a small `hwupload_cuda` pipeline
-- `qsv` is probed with `-init_hw_device qsv=...`
-
-This catches the practical failures that `-hwaccels` alone misses, such as:
-
-- missing `/dev/dri/renderD*` nodes
-- missing permissions on GPU device nodes
-- driver/runtime mismatches
-- backend initialization failures even though FFmpeg was compiled with support
-
-Core Types
-----------
-
-### `Kind`
-
-Normalized hardware acceleration backend name.
-
-- `VAAPI`
-- `CUDA`
-- `QSV`
-- `VideoToolbox`
-- `Auto`
-- `None`
-
-### `Support`
-
-Represents build-time FFmpeg support.
-
-- `Accels` is the set of compiled-in backends
-- `Encoders` is the set of compiled-in video encoders
-
-Useful methods:
-
-- `Has(kind)`
-- `SupportsCodec(kind, codec)`
-- `Kinds()`
-
-### `ProbeResult`
-
-Describes the outcome of a runtime probe for one backend/device candidate.
-
-- `Kind` is the backend being tested
-- `Device` is the device candidate, when relevant
-- `Args` is the probe FFmpeg command args that were attempted
-- `Available` reports probe success
-- `Error` contains stderr or failure text when probing fails
-
-### `SystemSupport`
-
-Represents runtime-usable support.
-
-- `Built` keeps the original build-time `Support`
-- `Probes` stores all probe attempts and outcomes grouped by backend
-
-Useful methods:
-
-- `Available(kind)`
-- `Device(kind)`
-- `SupportsCodec(kind, codec)`
-- `Select(codec, preferred...)`
-
-`SystemSupport.SupportsCodec` is stricter than `Support.SupportsCodec`: it only returns true when the encoder exists and the backend actually probed successfully on this machine.
-
-Common Flow
------------
-
-Typical usage should look like this:
-
-1. Run `DetectSystem`.
-2. Ask `SystemSupport` which backend is usable for the target codec.
-3. Build the FFmpeg command args for that backend.
-
-Example:
+## Detect once, share the result
 
 ```go
-ctx := context.Background()
-
-system, err := hwaccel.DetectSystem(ctx, ffmpeg.DefaultRunner, hwaccel.ProbeOptions{})
-if err != nil {
-    return err
-}
-
-kind, device, err := system.Select("h264", hwaccel.VAAPI, hwaccel.CUDA, hwaccel.QSV)
-if err != nil {
-    return err
-}
-
-args, err := hwaccel.BuildEncodeArgs(kind, "h264", device, "scale=1280:-2")
-if err != nil {
-    return err
-}
-
-// Append input/output args around the hardware-specific args.
-_ = args
+sys, fromCache, err := hwaccel.DetectCached(ctx, nil, "/var/cache/app/ffmpeg.json", 24*time.Hour, hwaccel.ProbeOptions{})
 ```
 
-Builder Helpers
----------------
+`System` holds the build's `caps.Set` plus a probe result per backend and
+device. `Detect` runs `caps.Detect` and then probes every registered
+backend; `DetectWithCaps` probes for a `caps.Set` you already have.
+Detection takes a second or so, so `DetectCached` keeps it on disk and
+reuses it until the ffmpeg version changes, the file is older than the
+given age, or the device nodes a backend would probe differ from the ones
+it probed last time.
 
-Once a backend is chosen, the package provides helpers to build consistent FFmpeg argument fragments.
+Ask the `System` what it found:
 
-- `BuildInputArgs(kind, device)`
-- `BuildFilter(kind, filters...)`
-- `BuildVideoCodec(kind, codec)`
-- `BuildEncodeArgs(kind, codec, device, filters...)`
+```go
+sys.Available(hwaccel.VAAPI)          // initialised on at least one device
+sys.Device(hwaccel.VAAPI)             // "/dev/dri/renderD128", true
+sys.SupportsCodec(hwaccel.CUDA, "hevc")
+sys.AvailableKinds()                  // []Kind{vaapi}
+sys.Probes[hwaccel.QSV][0].Error      // why a backend was rejected
+```
 
-These helpers encode the backend-specific conventions already needed by FFmpeg, for example:
+## Select a backend for a codec
 
-- VAAPI uses `-vaapi_device` plus `format=nv12,hwupload`
-- CUDA uses `-hwaccel cuda` and `hwupload_cuda`
-- QSV uses `-hwaccel qsv` plus `format=nv12,hwupload`
+```go
+sel, err := sys.Select("h264", hwaccel.CUDA, hwaccel.VAAPI)
+```
 
-Device Discovery
-----------------
+`Select` returns the first backend in preference order (registration order
+when none is given) that initialised here and whose encoder for the codec
+is in the build. The error is a `*SelectError` that explains every
+candidate: `vaapi: probe failed: no render node; cuda: build lacks
+h264_nvenc`.
 
-`DefaultDevices` returns backend-specific device candidates for probing.
+A `Selection` carries the kind, device and encoder, and renders its own
+ffmpeg pieces. The pipeline is software decode, upload, hardware encode,
+which works for any input codec:
 
-Current behavior:
+```go
+cmd := ffmpeg.NewCommand().Input("in.mkv")
+sel.Apply(cmd)                                  // -init_hw_device vaapi=hw:/dev/dri/renderD128 -filter_hw_device hw
+cmd.Output("out.mp4", sel.Opts("v:0", "scale=1280:-2")...)
+// -filter:v:0 scale=1280:-2,format=nv12,hwupload -c:v h264_vaapi
+```
 
-- `vaapi` and `qsv` on Linux look for `/dev/dri/renderD*`
-- `cuda` and `videotoolbox` currently use a single empty-device probe candidate
+The zero `Selection` means software: `Apply` adds nothing, `Filter` joins
+the filters, and `Opts` omits the codec so the caller picks a software
+encoder.
 
-`ProbeOptions` lets callers override or restrict that behavior:
+## Policy: what a job wants
 
-- `Kinds` limits which backends are tested
-- `Devices` supplies explicit per-backend device candidates
+Jobs should say how much they want hardware, not which backend:
 
-What This Package Does Not Do
------------------------------
+```go
+hwaccel.Policy{}                          // software (zero value)
+hwaccel.PreferHardware()                  // any usable backend, else software
+hwaccel.PreferHardware(hwaccel.CUDA)      // CUDA if usable, else software
+hwaccel.RequireHardware(hwaccel.VAAPI)    // VAAPI or an error
 
-This package does not try to benchmark backends or choose the fastest one.
+sel, reason, err := policy.Resolve(sys, "h264")
+```
 
-It also does not build a complete FFmpeg command line for an entire transcode job. It only builds the hardware-acceleration-specific pieces so the calling code can compose them with normal input, mapping, audio, and output options.
+`Resolve` returns the selection and, when it fell back to software under
+`Prefer`, the reason (the `SelectError` detail) for the job's log or plan.
+`Require` turns that reason into an error. A nil `System` counts as no
+hardware detected. The `tasks` package takes a `Policy` on every job and
+resolves it against the `System` on its `Tools`.
 
-Current Goal
-------------
+## Backends
 
-The package is meant to be the narrow place where hardware acceleration policy lives:
+Each backend is a `Backend` registered with `Register`; VAAPI, CUDA, QSV
+and VideoToolbox are built in, and `RegisterAlias` maps other names
+(`nvenc` resolves to `cuda`). A backend says how to probe itself, which
+global options initialise its device, how the filter chain uploads to it,
+and which encoder serves each codec. `VideoEncoder(kind, codec)` exposes
+that last mapping on its own.
 
-- normalize backend names
-- detect what FFmpeg says it supports
-- verify what the current system can actually use
-- select a usable backend for a target codec
-- build the backend-specific FFmpeg arguments consistently
-Backends And Caching
---------------------
+Device candidates: VAAPI and QSV probe every `/dev/dri/renderD*` on Linux;
+CUDA and VideoToolbox probe once with no device. `ProbeOptions.Kinds`
+limits which backends are probed and `ProbeOptions.Devices` overrides the
+candidates per backend.
 
-Each backend is a `Backend` value registered with `Register`. The built-in
-VAAPI, CUDA, QSV and VideoToolbox backends live in `builtin.go`; an external
-package can register its own kind, probe command and argument builders
-without changes here, and `RegisterAlias` maps alternative names (for
-example `nvenc` to `cuda`) for `NormalizeKind`.
+## Not yet
 
-`hwaccel.InputOpt` and `hwaccel.EncodeOpt` return `ffmpeg.Opt` values for
-use with `ffmpeg.Command`.
-
-`DetectSystem` probes hardware and takes noticeable time. `DetectSystemCached`
-stores the result as JSON keyed by the ffmpeg version string and reuses it
-until the binary changes; `SaveCache` and `LoadCache` expose the file
-format directly.
+Hardware decoding. The current pipeline decodes in software and uploads,
+which is safe for any input. A decode flag on `Policy` that switches to
+`-hwaccel` with on-device scaling is the planned next step.

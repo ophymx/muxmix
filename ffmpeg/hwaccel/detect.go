@@ -3,73 +3,131 @@ package hwaccel
 import (
 	"context"
 	"fmt"
-	"slices"
 	"strings"
+	"time"
 
 	baseffmpeg "github.com/ophymx/muxmix/ffmpeg"
 	"github.com/ophymx/muxmix/ffmpeg/caps"
 )
 
-func Detect(ctx context.Context, runner baseffmpeg.Runner) (Support, error) {
+// Detect queries the build's capabilities with caps.Detect, then probes
+// every registered backend (or those in options.Kinds) by running a tiny
+// pipeline on each device candidate. It takes a second or so on a typical
+// machine; use DetectCached to keep the result between runs.
+func Detect(ctx context.Context, runner baseffmpeg.Runner, options ProbeOptions) (*System, error) {
 	if runner == nil {
 		runner = baseffmpeg.DefaultRunner
 	}
-
-	hwaccels, err := runDetectCommand(ctx, runner, "-hide_banner", "-hwaccels")
+	set, err := caps.Detect(ctx, runner)
 	if err != nil {
-		return Support{}, fmt.Errorf("detect ffmpeg hwaccels: %w", err)
+		return nil, err
 	}
-
-	encoders, err := runDetectCommand(ctx, runner, "-hide_banner", "-encoders")
-	if err != nil {
-		return Support{}, fmt.Errorf("detect ffmpeg encoders: %w", err)
-	}
-
-	return ParseDetection(hwaccels, encoders), nil
+	return DetectWithCaps(ctx, runner, set, options), nil
 }
 
-func ParseDetection(hwaccelsOutput, encodersOutput string) Support {
-	support := Support{
-		Accels:   make(map[Kind]bool),
-		Encoders: ParseVideoEncoders(encodersOutput),
+// DetectWithCaps probes the backends for a build whose capabilities are
+// already known. Backends the build lacks are recorded as unavailable
+// without running anything. set may be nil, in which case every backend
+// is probed.
+func DetectWithCaps(ctx context.Context, runner baseffmpeg.Runner, set *caps.Set, options ProbeOptions) *System {
+	if runner == nil {
+		runner = baseffmpeg.DefaultRunner
 	}
-	for _, kind := range ParseHardwareAccelerators(hwaccelsOutput) {
-		support.Accels[kind] = true
+	sys := &System{Caps: set, Probes: make(map[Kind][]ProbeResult), DetectedAt: time.Now().UTC()}
+	for _, kind := range probeKinds(options.Kinds) {
+		if set != nil && !set.HasHWAccel(string(kind)) {
+			sys.Probes[kind] = []ProbeResult{{Kind: kind, Error: fmt.Sprintf("ffmpeg is not built with %s support", kind)}}
+			continue
+		}
+		devices := probeDevices(kind, options.Devices)
+		results := make([]ProbeResult, 0, len(devices))
+		for _, device := range devices {
+			results = append(results, Probe(ctx, runner, kind, device))
+		}
+		if len(results) == 0 {
+			results = append(results, ProbeResult{Kind: kind, Error: fmt.Sprintf("no device candidates for %s", kind)})
+		}
+		sortProbes(results)
+		sys.Probes[kind] = results
 	}
-	return support
+	return sys
 }
 
-func ParseHardwareAccelerators(output string) []Kind {
-	seen := make(map[Kind]bool)
-	for _, name := range caps.ParseList(output) {
-		kind := NormalizeKind(name)
-		if kind == None || kind == Auto {
+// Probe tries to initialise one backend on one device by running the
+// backend's probe command.
+func Probe(ctx context.Context, runner baseffmpeg.Runner, kind Kind, device string) ProbeResult {
+	if runner == nil {
+		runner = baseffmpeg.DefaultRunner
+	}
+	kind = NormalizeKind(string(kind))
+	probe := ProbeResult{Kind: kind, Device: device}
+	b, ok := Lookup(kind)
+	if !ok {
+		probe.Error = fmt.Sprintf("unknown hwaccel %q", kind)
+		return probe
+	}
+	args, err := b.ProbeArgs(device)
+	if err != nil {
+		probe.Error = err.Error()
+		return probe
+	}
+	probe.Args = append([]string(nil), args...)
+
+	result, runErr := runner.RunArgs(ctx, args)
+	if runErr != nil {
+		probe.Error = formatProbeError(runErr, result)
+		return probe
+	}
+	probe.Available = true
+	return probe
+}
+
+func formatProbeError(err error, result *baseffmpeg.Result) string {
+	if result != nil {
+		if stderr := strings.TrimSpace(string(result.Stderr)); stderr != "" {
+			return stderr
+		}
+		if report := strings.TrimSpace(string(result.Report)); report != "" {
+			return report
+		}
+	}
+	if err != nil {
+		return err.Error()
+	}
+	return "probe failed"
+}
+
+func probeKinds(kinds []Kind) []Kind {
+	if len(kinds) == 0 {
+		return Kinds()
+	}
+	seen := make(map[Kind]bool, len(kinds))
+	resolved := make([]Kind, 0, len(kinds))
+	for _, kind := range kinds {
+		kind = NormalizeKind(string(kind))
+		if kind == None || seen[kind] {
 			continue
 		}
 		seen[kind] = true
+		resolved = append(resolved, kind)
 	}
-	kinds := make([]Kind, 0, len(seen))
-	for kind := range seen {
-		kinds = append(kinds, kind)
-	}
-	slices.Sort(kinds)
-	return kinds
+	return resolved
 }
 
-func ParseVideoEncoders(output string) map[string]bool {
-	encoders := make(map[string]bool)
-	for _, c := range caps.ParseCodecs(output) {
-		if c.Type == caps.Video {
-			encoders[strings.ToLower(c.Name)] = true
+func probeDevices(kind Kind, configured map[Kind][]string) []string {
+	if configured != nil {
+		if devices, ok := configured[kind]; ok {
+			return append([]string(nil), devices...)
 		}
 	}
-	return encoders
+	return DefaultDevices(kind)
 }
 
-func runDetectCommand(ctx context.Context, runner baseffmpeg.Runner, args ...string) (string, error) {
-	result, err := runner.RunArgs(ctx, args)
-	if err != nil {
-		return "", err
+// DefaultDevices returns the backend's device candidates on this host.
+func DefaultDevices(kind Kind) []string {
+	b, ok := Lookup(kind)
+	if !ok {
+		return nil
 	}
-	return strings.TrimSpace(string(result.Stdout) + "\n" + string(result.Stderr)), nil
+	return b.DefaultDevices()
 }

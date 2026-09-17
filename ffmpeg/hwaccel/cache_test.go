@@ -1,103 +1,70 @@
 package hwaccel
 
 import (
+	"context"
 	"errors"
 	"path/filepath"
-	"slices"
 	"testing"
+	"time"
+
+	baseffmpeg "github.com/ophymx/muxmix/ffmpeg"
 )
 
 func TestCacheRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "hw", "cache.json")
-	support := SystemSupport{
-		Built: Support{Accels: map[Kind]bool{VAAPI: true}, Encoders: map[string]bool{"h264_vaapi": true}},
-		Probes: map[Kind][]ProbeResult{
-			VAAPI: {{Kind: VAAPI, Device: "/dev/dri/renderD128", Available: true, Args: []string{"-x"}}},
-			CUDA:  {{Kind: CUDA, Error: "no device"}},
-		},
-	}
-	if err := SaveCache(path, "7.1.5", support); err != nil {
+	sys := handSystem()
+	if err := sys.Save(path); err != nil {
 		t.Fatal(err)
 	}
-	c, err := LoadCache(path, "7.1.5")
+	got, err := Load(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.FFmpegVersion != "7.1.5" || c.DetectedAt.IsZero() || !c.Support.Available(VAAPI) || c.Support.Available(CUDA) {
-		t.Errorf("cache = %+v", c)
+	if got.DetectedAt.IsZero() || !got.Available(VAAPI) || got.Available(CUDA) || !got.Caps.HasEncoder("h264_vaapi") || got.Caps.Version.Version != "7.1.5" {
+		t.Errorf("reloaded = %+v", got)
 	}
-	if dev, ok := c.Support.Device(VAAPI); !ok || dev != "/dev/dri/renderD128" {
-		t.Errorf("device = %q %v", dev, ok)
-	}
-	if !c.Support.SupportsCodec(VAAPI, "h264") {
+	if !got.SupportsCodec(VAAPI, "h264") || got.SupportsCodec(VAAPI, "hevc") {
 		t.Error("SupportsCodec after reload")
 	}
-	if _, err := LoadCache(path, "8.0"); !errors.Is(err, ErrCacheStale) {
-		t.Errorf("stale = %v", err)
-	}
-	if _, err := LoadCache(filepath.Join(t.TempDir(), "missing.json"), ""); err == nil {
+	if _, err := Load(filepath.Join(t.TempDir(), "missing.json")); err == nil {
 		t.Error("expected error for missing cache")
 	}
+
+	opts := ProbeOptions{Devices: map[Kind][]string{VAAPI: {"/dev/dri/renderD128"}, CUDA: {""}}}
+	if err := got.stale("7.1.5", 0, opts); err != nil {
+		t.Errorf("fresh cache reported stale: %v", err)
+	}
+	if err := got.stale("8.0", 0, opts); !errors.Is(err, ErrCacheStale) {
+		t.Errorf("version change: %v", err)
+	}
+	if err := got.stale("7.1.5", time.Nanosecond, opts); !errors.Is(err, ErrCacheStale) {
+		t.Errorf("age: %v", err)
+	}
+	moved := ProbeOptions{Devices: map[Kind][]string{VAAPI: {"/dev/dri/renderD129"}, CUDA: {""}}}
+	if err := got.stale("7.1.5", 0, moved); !errors.Is(err, ErrCacheStale) {
+		t.Errorf("device change: %v", err)
+	}
 }
 
-type fakeBackend struct{}
+func TestDetectCached(t *testing.T) {
+	fake := fakeFFmpeg(t, "vaapi", vaapiQSVEncoders, `
+  *"vaapi=probe:/dev/fake"*) exit 0 ;;
+`)
+	runner := baseffmpeg.New(baseffmpeg.WithBinary(fake))
+	path := filepath.Join(t.TempDir(), "cache.json")
+	opts := ProbeOptions{Kinds: []Kind{VAAPI}, Devices: map[Kind][]string{VAAPI: {"/dev/fake"}}}
+	ctx := context.Background()
 
-func (fakeBackend) Kind() Kind                           { return "topaz" }
-func (fakeBackend) DefaultDevices() []string             { return []string{"gpu0"} }
-func (fakeBackend) ProbeArgs(d string) ([]string, error) { return []string{"-probe", d}, nil }
-func (fakeBackend) InputArgs(d string) ([]string, error) { return []string{"-topaz_device", d}, nil }
-func (fakeBackend) Filter(extra ...string) (string, error) {
-	return joinFilters(extra, "topazupload"), nil
-}
-func (fakeBackend) VideoCodec(codec string) (string, error) {
-	return codecTable{"h264": "h264_topaz"}.encoder(codec)
-}
-
-func TestRegisterBackend(t *testing.T) {
-	Register(fakeBackend{})
-	RegisterAlias("tpz", "topaz")
-	if NormalizeKind("TPZ") != "topaz" || NormalizeKind("topaz") != "topaz" || NormalizeKind("unknown") != None {
-		t.Error("NormalizeKind")
+	sys, fromCache, err := DetectCached(ctx, runner, path, time.Hour, opts)
+	if err != nil || fromCache || !sys.Available(VAAPI) {
+		t.Fatalf("first: %v %v %+v", err, fromCache, sys)
 	}
-	if !slices.Contains(Kinds(), Kind("topaz")) {
-		t.Errorf("Kinds = %v", Kinds())
+	sys, fromCache, err = DetectCached(ctx, runner, path, time.Hour, opts)
+	if err != nil || !fromCache || !sys.Available(VAAPI) {
+		t.Fatalf("second: %v %v", err, fromCache)
 	}
-	args, err := BuildEncodeArgs("topaz", "h264", "gpu0", "scale=1280:-2")
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := []string{"-topaz_device", "gpu0", "-vf", "scale=1280:-2,topazupload", "-c:v", "h264_topaz"}
-	if !slices.Equal(args, want) {
-		t.Errorf("args = %v", args)
-	}
-	if DefaultDevices("topaz")[0] != "gpu0" {
-		t.Error("DefaultDevices")
-	}
-	if p, err := DefaultProbeArgs("topaz", "gpu0"); err != nil || p[1] != "gpu0" {
-		t.Errorf("probe args = %v %v", p, err)
-	}
-	defer func() {
-		if recover() == nil {
-			t.Error("duplicate Register should panic")
-		}
-	}()
-	Register(fakeBackend{})
-}
-
-func TestNoneAndAuto(t *testing.T) {
-	if args, err := BuildInputArgs(None, ""); err != nil || args != nil {
-		t.Errorf("None input = %v %v", args, err)
-	}
-	if f, err := BuildFilter(None, "scale=1:1", "", "fps=30"); err != nil || f != "scale=1:1,fps=30" {
-		t.Errorf("None filter = %q %v", f, err)
-	}
-	if c, err := BuildVideoCodec(None, "H265"); err != nil || c != "hevc" {
-		t.Errorf("None codec = %q %v", c, err)
-	}
-	if _, err := BuildVideoCodec(Auto, "h264"); err == nil {
-		t.Error("Auto should error")
-	}
-	if _, err := BuildVideoCodec("nope", "h264"); err == nil {
-		t.Error("unknown kind should error")
+	opts.Devices[VAAPI] = []string{"/dev/other"}
+	if _, fromCache, err = DetectCached(ctx, runner, path, time.Hour, opts); err != nil || fromCache {
+		t.Fatalf("after device change: %v %v", err, fromCache)
 	}
 }

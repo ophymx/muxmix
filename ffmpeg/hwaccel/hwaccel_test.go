@@ -2,288 +2,318 @@ package hwaccel
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	baseffmpeg "github.com/ophymx/muxmix/ffmpeg"
+	"github.com/ophymx/muxmix/ffmpeg/caps"
 )
 
-func writeFakeFFmpeg(t *testing.T, body string) string {
+// fakeFFmpeg writes a POSIX sh script that answers the caps listings with
+// the given hwaccels and encoders, and the probes with probeCase (a sh
+// "case" body matched against the whole argument string).
+func fakeFFmpeg(t *testing.T, hwaccels, encoders, probeCase string) string {
 	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("shell-script test")
+	}
+	script := `#!/bin/sh
+set -eu
+if [ "${1:-}" = "-hide_banner" ]; then shift; fi
+case "${1:-}" in
+  -version) echo "ffmpeg version 7.1.5 Copyright (c) 2000-2025"; exit 0 ;;
+  -hwaccels) echo "Hardware acceleration methods:"; printf '%s\n' ` + shQuote(hwaccels) + `; exit 0 ;;
+  -encoders) echo "Encoders:"; printf '%s\n' ` + shQuote(encoders) + `; exit 0 ;;
+  -decoders|-muxers|-demuxers|-filters|-pix_fmts|-sample_fmts|-bsfs|-protocols) exit 0 ;;
+esac
+args="$*"
+case "$args" in
+` + probeCase + `
+esac
+echo "unexpected args: $*" >&2
+exit 1
+`
 	path := filepath.Join(t.TempDir(), "fake-ffmpeg.sh")
-	script := "#!/bin/sh\nset -eu\n" + body + "\n" // POSIX sh: Alpine images have no bash
 	if err := os.WriteFile(path, []byte(script), 0o700); err != nil {
-		t.Fatalf("failed to write fake ffmpeg script: %v", err)
+		t.Fatal(err)
 	}
 	return path
 }
 
-func TestParseHardwareAccelerators(t *testing.T) {
-	got := ParseHardwareAccelerators(`Hardware acceleration methods:
-cuda
-vaapi
-qsv
-vulkan
-videotoolbox
-`)
-	want := []Kind{CUDA, QSV, VAAPI, VideoToolbox}
-	if !slices.Equal(got, want) {
-		t.Fatalf("ParseHardwareAccelerators() = %v, want %v", got, want)
-	}
-}
+func shQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
 
-func TestParseVideoEncoders(t *testing.T) {
-	encoders := ParseVideoEncoders(`Encoders:
- V....D h264_vaapi           H.264/AVC (VAAPI)
- V....D hevc_nvenc           NVIDIA NVENC hevc encoder
- A..... aac                  AAC (Advanced Audio Coding)
-`)
-	if !encoders["h264_vaapi"] {
-		t.Fatal("expected h264_vaapi to be detected")
-	}
-	if !encoders["hevc_nvenc"] {
-		t.Fatal("expected hevc_nvenc to be detected")
-	}
-	if encoders["aac"] {
-		t.Fatal("did not expect audio encoder to be treated as video encoder")
-	}
-}
+const vaapiQSVEncoders = ` V....D h264_vaapi           H.264/AVC (VAAPI)
+ V....D h264_qsv             H.264/AVC (QSV)
+ V....D libx264              libx264 H.264`
 
 func TestDetect(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("shell-script test")
-	}
-
-	fake := writeFakeFFmpeg(t, `
-if [ "${1:-}" = "-hide_banner" ]; then
-  shift
-fi
-
-case "${1:-}" in
-  -hwaccels)
-    cat <<'EOF'
-Hardware acceleration methods:
-vaapi
-cuda
-EOF
-    ;;
-  -encoders)
-    cat <<'EOF'
-Encoders:
- V....D h264_vaapi           H.264/AVC (VAAPI)
- V....D hevc_nvenc           NVIDIA NVENC hevc encoder
-EOF
-    ;;
-  *)
-    echo "unexpected args: $*" >&2
-    exit 1
-    ;;
-esac
+	fake := fakeFFmpeg(t, "vaapi\nqsv", vaapiQSVEncoders, `
+  *"-init_hw_device vaapi=probe:/dev/fake-renderD128"*) exit 0 ;;
+  *"-init_hw_device qsv=probe:/dev/fake-renderD129"*) echo "qsv runtime unavailable" >&2; exit 1 ;;
 `)
-
 	runner := baseffmpeg.New(baseffmpeg.WithBinary(fake))
-	support, err := Detect(context.Background(), runner)
+	opts := ProbeOptions{
+		Kinds:   []Kind{QSV, VAAPI, CUDA},
+		Devices: map[Kind][]string{VAAPI: {"/dev/fake-renderD128"}, QSV: {"/dev/fake-renderD129"}},
+	}
+	sys, err := Detect(context.Background(), runner, opts)
 	if err != nil {
-		t.Fatalf("Detect() error = %v", err)
+		t.Fatal(err)
 	}
-	if !support.Has(VAAPI) {
-		t.Fatal("expected vaapi support")
+	if sys.Caps == nil || sys.Caps.Version.Version != "7.1.5" || !sys.Caps.HasEncoder("h264_vaapi") {
+		t.Fatalf("caps not detected: %+v", sys.Caps)
 	}
-	if !support.Has(CUDA) {
-		t.Fatal("expected cuda support")
+	if !sys.Built(VAAPI) || !sys.Built(QSV) || sys.Built(CUDA) {
+		t.Error("Built")
 	}
-	if !support.SupportsCodec(VAAPI, "h264") {
-		t.Fatal("expected h264 vaapi encoder support")
+	if !sys.Available(VAAPI) || sys.Available(QSV) || sys.Available(CUDA) {
+		t.Errorf("Available: %+v", sys.Probes)
 	}
-	if !support.SupportsCodec(CUDA, "hevc") {
-		t.Fatal("expected hevc nvenc encoder support")
+	if dev, ok := sys.Device(VAAPI); !ok || dev != "/dev/fake-renderD128" {
+		t.Errorf("Device(VAAPI) = %q %v", dev, ok)
 	}
-	if support.SupportsCodec(QSV, "h264") {
-		t.Fatal("did not expect qsv h264 support")
+	if !slices.Equal(sys.AvailableKinds(), []Kind{VAAPI}) {
+		t.Errorf("AvailableKinds = %v", sys.AvailableKinds())
+	}
+	if !sys.SupportsCodec(VAAPI, "h264") || sys.SupportsCodec(QSV, "h264") || sys.SupportsCodec(VAAPI, "hevc") {
+		t.Error("SupportsCodec")
+	}
+	if got := sys.Probes[QSV][0].Error; !strings.Contains(got, "qsv runtime unavailable") {
+		t.Errorf("qsv probe error = %q", got)
+	}
+	if got := sys.Probes[CUDA][0].Error; !strings.Contains(got, "not built") {
+		t.Errorf("cuda probe error = %q", got)
+	}
+
+	sel, err := sys.Select("h264", QSV, VAAPI)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sel.Kind != VAAPI || sel.Device != "/dev/fake-renderD128" || sel.Encoder != "h264_vaapi" || sel.Codec != "h264" {
+		t.Errorf("Select = %+v", sel)
+	}
+	if sel.String() != "h264_vaapi on /dev/fake-renderD128" {
+		t.Errorf("String = %q", sel)
+	}
+
+	_, err = sys.Select("hevc")
+	var se *SelectError
+	if !errors.As(err, &se) || se.Codec != "hevc" {
+		t.Fatalf("Select(hevc) = %v", err)
+	}
+	for _, want := range []string{"vaapi: build lacks hevc_vaapi", "cuda: build lacks hevc_nvenc"} {
+		if !strings.Contains(se.Detail(), want) {
+			t.Errorf("detail %q lacks %q", se.Detail(), want)
+		}
+	}
+	if _, err := sys.Select("h264", QSV); err == nil || !strings.Contains(err.Error(), "qsv: probe failed: qsv runtime unavailable") {
+		t.Errorf("Select(h264, QSV) = %v", err)
 	}
 }
 
-func TestBuildEncodeArgs(t *testing.T) {
-	// The VAAPI device only defaults on Linux; pass it explicitly so the
-	// test is platform-independent.
-	args, err := BuildEncodeArgs(VAAPI, "h264", "/dev/dri/renderD128", "scale=1280:-2")
-	if err != nil {
-		t.Fatalf("BuildEncodeArgs() error = %v", err)
-	}
-	want := []string{
-		"-vaapi_device", "/dev/dri/renderD128",
-		"-vf", "scale=1280:-2,format=nv12,hwupload",
-		"-c:v", "h264_vaapi",
-	}
-	if !slices.Equal(args, want) {
-		t.Fatalf("BuildEncodeArgs() = %v, want %v", args, want)
-	}
-
-	cudaArgs, err := BuildEncodeArgs(CUDA, "hevc", "0", "fps=30")
-	if err != nil {
-		t.Fatalf("BuildEncodeArgs() cuda error = %v", err)
-	}
-	cudaWant := []string{
-		"-hwaccel", "cuda",
-		"-hwaccel_device", "0",
-		"-vf", "fps=30,hwupload_cuda",
-		"-c:v", "hevc_nvenc",
-	}
-	if !slices.Equal(cudaArgs, cudaWant) {
-		t.Fatalf("BuildEncodeArgs() cuda = %v, want %v", cudaArgs, cudaWant)
-	}
-}
-
-func TestBuildVideoCodecRejectsUnsupportedCodec(t *testing.T) {
-	if _, err := BuildVideoCodec(VideoToolbox, "vp9"); err == nil {
-		t.Fatal("expected unsupported codec error")
-	}
-}
-
-func TestDefaultProbeArgs(t *testing.T) {
-	args, err := DefaultProbeArgs(VAAPI, "/dev/dri/renderD128")
-	if err != nil {
-		t.Fatalf("DefaultProbeArgs() error = %v", err)
-	}
-	joined := strings.Join(args, " ")
-	if !strings.Contains(joined, "-init_hw_device vaapi=probe:/dev/dri/renderD128") {
-		t.Fatalf("DefaultProbeArgs() = %v, missing vaapi init_hw_device", args)
-	}
-	if !strings.Contains(joined, "format=nv12,hwupload") {
-		t.Fatalf("DefaultProbeArgs() = %v, missing vaapi upload filter", args)
-	}
-	if _, err := DefaultProbeArgs(VAAPI, ""); err == nil {
-		t.Fatal("expected missing device error for vaapi probe args")
-	}
-}
-
-func TestDetectSystem(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("shell-script test")
-	}
-
-	fake := writeFakeFFmpeg(t, `
-if [ "${1:-}" = "-hide_banner" ]; then
-  shift
-fi
-
-if [ "${1:-}" = "-hwaccels" ]; then
-  cat <<'EOF'
-Hardware acceleration methods:
-vaapi
-qsv
-EOF
-  exit 0
-fi
-
-if [ "${1:-}" = "-encoders" ]; then
-  cat <<'EOF'
-Encoders:
- V....D h264_vaapi           H.264/AVC (VAAPI)
- V....D h264_qsv             H.264/AVC (QSV)
-EOF
-  exit 0
-fi
-
-args="$*"
-case "$args" in
-  *"-init_hw_device vaapi=probe:/dev/fake-renderD128"*)
-    exit 0
-    ;;
-  *"-init_hw_device qsv=probe:/dev/fake-renderD129"*)
-    echo "qsv runtime unavailable" >&2
-    exit 1
-    ;;
-esac
-
-echo "unexpected args: $*" >&2
-exit 1
+func TestDetectWithCapsNilSet(t *testing.T) {
+	fake := fakeFFmpeg(t, "", "", `
+  *"cuda=probe"*) exit 0 ;;
 `)
-
 	runner := baseffmpeg.New(baseffmpeg.WithBinary(fake))
-	system, err := DetectSystem(context.Background(), runner, ProbeOptions{
-		Kinds: []Kind{QSV, VAAPI},
-		Devices: map[Kind][]string{
-			VAAPI: {"/dev/fake-renderD128"},
-			QSV:   {"/dev/fake-renderD129"},
-		},
-	})
-	if err != nil {
-		t.Fatalf("DetectSystem() error = %v", err)
-	}
-	if !system.Available(VAAPI) {
-		t.Fatal("expected vaapi runtime availability")
-	}
-	if system.Available(QSV) {
-		t.Fatal("did not expect qsv runtime availability")
-	}
-	device, ok := system.Device(VAAPI)
-	if !ok || device != "/dev/fake-renderD128" {
-		t.Fatalf("Device(VAAPI) = (%q, %t), want (/dev/fake-renderD128, true)", device, ok)
-	}
-	if !system.SupportsCodec(VAAPI, "h264") {
-		t.Fatal("expected vaapi h264 runtime support")
-	}
-	if system.SupportsCodec(QSV, "h264") {
-		t.Fatal("did not expect qsv h264 runtime support")
-	}
-	kind, selectedDevice, err := system.Select("h264", QSV, VAAPI)
-	if err != nil {
-		t.Fatalf("Select() error = %v", err)
-	}
-	if kind != VAAPI || selectedDevice != "/dev/fake-renderD128" {
-		t.Fatalf("Select() = (%q, %q), want (%q, %q)", kind, selectedDevice, VAAPI, "/dev/fake-renderD128")
-	}
-	if got := system.Probes[QSV][0].Error; !strings.Contains(got, "qsv runtime unavailable") {
-		t.Fatalf("qsv probe error = %q, want stderr message", got)
+	sys := DetectWithCaps(context.Background(), runner, nil, ProbeOptions{Kinds: []Kind{CUDA}})
+	if !sys.Available(CUDA) || !sys.SupportsCodec(CUDA, "hevc") {
+		t.Errorf("nil caps should probe and trust encoders: %+v", sys.Probes)
 	}
 }
 
 func TestProbeReportsRunnerFailure(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("shell-script test")
-	}
-
-	fake := writeFakeFFmpeg(t, `
-echo "forced failure: $*" >&2
-exit 2
+	fake := fakeFFmpeg(t, "", "", `
+  *) echo "forced failure: $*" >&2; exit 2 ;;
 `)
-
 	runner := baseffmpeg.New(baseffmpeg.WithBinary(fake))
 	probe := Probe(context.Background(), runner, CUDA, "0")
-	if probe.Available {
-		t.Fatal("expected probe failure")
+	if probe.Available || !strings.Contains(probe.Error, "forced failure") || len(probe.Args) == 0 {
+		t.Errorf("probe = %+v", probe)
 	}
-	if !strings.Contains(probe.Error, "forced failure") {
-		t.Fatalf("Probe().Error = %q, want stderr message", probe.Error)
-	}
-	if len(probe.Args) == 0 {
-		t.Fatal("expected probe args to be recorded")
+	if p := Probe(context.Background(), runner, "nope", ""); p.Available || !strings.Contains(p.Error, "unknown") {
+		t.Errorf("unknown kind = %+v", p)
 	}
 }
 
-func TestSelectFailsWithoutRuntimeSupport(t *testing.T) {
-	system := SystemSupport{
-		Built: Support{
-			Accels: map[Kind]bool{VAAPI: true},
-			Encoders: map[string]bool{
-				"h264_vaapi": true,
-			},
+func handSystem() *System {
+	return &System{
+		Caps: &caps.Set{
+			Version:  &baseffmpeg.VersionInfo{Version: "7.1.5"},
+			Encoders: []caps.Codec{{Name: "h264_vaapi", Type: caps.Video}, {Name: "h264_nvenc", Type: caps.Video}, {Name: "libx264", Type: caps.Video}},
+			HWAccels: []string{"vaapi", "cuda"},
 		},
 		Probes: map[Kind][]ProbeResult{
-			VAAPI: {{Kind: VAAPI, Device: "/dev/fake", Error: "init failed"}},
+			VAAPI: {{Kind: VAAPI, Device: "/dev/dri/renderD128", Available: true}},
+			CUDA:  {{Kind: CUDA, Error: "Cannot load libcuda.so.1\nmore detail"}},
 		},
+		DetectedAt: time.Now(),
 	}
-	_, _, err := system.Select("h264", VAAPI)
-	if err == nil {
-		t.Fatal("expected Select() failure when runtime support is unavailable")
+}
+
+func TestSelection(t *testing.T) {
+	sys := handSystem()
+	sel, err := sys.Select("h264")
+	if err != nil {
+		t.Fatal(err)
 	}
-	if got := fmt.Sprint(err); !strings.Contains(got, "no runtime hwaccel support") {
-		t.Fatalf("Select() error = %q, want runtime support error", got)
+	cmd := baseffmpeg.NewCommand().Input("in.mp4")
+	sel.Apply(cmd)
+	cmd.Output("out.mp4", sel.Opts("v:0", "scale=1280:-2")...)
+	got := strings.Join(cmd.Args(), " ")
+	want := "-init_hw_device vaapi=hw:/dev/dri/renderD128 -filter_hw_device hw -i in.mp4 -filter:v:0 scale=1280:-2,format=nv12,hwupload -c:v h264_vaapi out.mp4"
+	if got != want {
+		t.Errorf("args\n got %s\nwant %s", got, want)
+	}
+	if f := sel.Filter("", "fps=30"); f != "fps=30,format=nv12,hwupload" {
+		t.Errorf("Filter = %q", f)
+	}
+
+	var sw Selection
+	if sw.Hardware() || sw.String() != "software" || sw.Filter("scale=1:1", "fps=30") != "scale=1:1,fps=30" {
+		t.Errorf("software selection: %+v", sw)
+	}
+	cmd = baseffmpeg.NewCommand().Input("in.mp4")
+	sw.Apply(cmd)
+	cmd.Output("out.mp4", sw.Opts("v")...)
+	if got := strings.Join(cmd.Args(), " "); got != "-i in.mp4 out.mp4" {
+		t.Errorf("software args = %s", got)
+	}
+
+	cuda := Selection{Kind: CUDA, Encoder: "hevc_nvenc", Codec: "hevc"}
+	if cuda.String() != "hevc_nvenc (cuda)" {
+		t.Errorf("String = %q", cuda)
+	}
+	cmd = baseffmpeg.NewCommand()
+	cuda.Apply(cmd)
+	if got := strings.Join(cmd.Args(), " "); got != "-init_hw_device cuda=hw -filter_hw_device hw" {
+		t.Errorf("cuda global = %s", got)
+	}
+}
+
+func TestPolicy(t *testing.T) {
+	sys := handSystem()
+
+	sel, reason, err := Policy{}.Resolve(sys, "h264")
+	if err != nil || sel.Hardware() || reason != "" {
+		t.Errorf("software policy: %+v %q %v", sel, reason, err)
+	}
+	sel, reason, err = PreferHardware().Resolve(sys, "h264")
+	if err != nil || sel.Kind != VAAPI || reason != "" {
+		t.Errorf("prefer h264: %+v %q %v", sel, reason, err)
+	}
+	sel, reason, err = PreferHardware(CUDA).Resolve(sys, "h264")
+	if err != nil || sel.Hardware() || !strings.Contains(reason, "cuda: probe failed: Cannot load libcuda.so.1") || strings.Contains(reason, "more detail") {
+		t.Errorf("prefer cuda: %+v %q %v", sel, reason, err)
+	}
+	sel, reason, err = PreferHardware().Resolve(nil, "h264")
+	if err != nil || sel.Hardware() || reason == "" {
+		t.Errorf("prefer nil sys: %+v %q %v", sel, reason, err)
+	}
+	if _, _, err = RequireHardware(CUDA).Resolve(sys, "h264"); err == nil || !strings.Contains(err.Error(), "required for h264") {
+		t.Errorf("require cuda: %v", err)
+	}
+	if _, _, err = RequireHardware().Resolve(nil, "h264"); err == nil {
+		t.Error("require with nil sys should fail")
+	}
+	if sel, _, err := RequireHardware().Resolve(sys, "H265"); err == nil || sel.Codec != "hevc" {
+		t.Errorf("require hevc: %+v %v", sel, err)
+	}
+}
+
+type fakeBackend struct{}
+
+func (fakeBackend) Kind() Kind                            { return "topaz" }
+func (fakeBackend) DefaultDevices() []string              { return []string{"gpu0"} }
+func (fakeBackend) ProbeArgs(d string) ([]string, error)  { return []string{"-probe", d}, nil }
+func (fakeBackend) DeviceArgs(d string) ([]string, error) { return []string{"-topaz_device", d}, nil }
+func (fakeBackend) Filter(extra ...string) (string, error) {
+	return joinFilters(extra, "topazupload"), nil
+}
+func (fakeBackend) VideoCodec(codec string) (string, error) {
+	return codecTable{"h264": "h264_topaz"}.encoder(codec)
+}
+
+func TestRegisterBackend(t *testing.T) {
+	Register(fakeBackend{})
+	RegisterAlias("tpz", "topaz")
+	if NormalizeKind("TPZ") != "topaz" || NormalizeKind("topaz") != "topaz" || NormalizeKind("unknown") != None || NormalizeKind("auto") != None {
+		t.Error("NormalizeKind")
+	}
+	if !slices.Contains(Kinds(), Kind("topaz")) || DefaultDevices("topaz")[0] != "gpu0" {
+		t.Error("registry")
+	}
+	sel := Selection{Kind: "topaz", Device: "gpu0", Encoder: "h264_topaz", Codec: "h264"}
+	cmd := baseffmpeg.NewCommand()
+	sel.Apply(cmd)
+	cmd.Output("o", sel.Opts("v", "scale=1280:-2")...)
+	if got := strings.Join(cmd.Args(), " "); got != "-topaz_device gpu0 -filter:v scale=1280:-2,topazupload -c:v h264_topaz o" {
+		t.Errorf("args = %s", got)
+	}
+	defer func() {
+		if recover() == nil {
+			t.Error("duplicate Register should panic")
+		}
+	}()
+	Register(fakeBackend{})
+}
+
+func TestVideoEncoder(t *testing.T) {
+	if c, err := VideoEncoder(None, "H265"); err != nil || c != "hevc" {
+		t.Errorf("None = %q %v", c, err)
+	}
+	if c, err := VideoEncoder(CUDA, "hevc"); err != nil || c != "hevc_nvenc" {
+		t.Errorf("CUDA = %q %v", c, err)
+	}
+	if _, err := VideoEncoder(VideoToolbox, "vp9"); err == nil {
+		t.Error("unsupported codec should error")
+	}
+	if _, err := VideoEncoder("nope", "h264"); err == nil {
+		t.Error("unknown kind should error")
+	}
+}
+
+func TestBuiltinArgs(t *testing.T) {
+	cases := []struct {
+		sel  Selection
+		want string
+	}{
+		{Selection{Kind: VAAPI, Device: "/dev/dri/renderD128", Encoder: "h264_vaapi"},
+			"-init_hw_device vaapi=hw:/dev/dri/renderD128 -filter_hw_device hw -filter:v scale=1280:-2,format=nv12,hwupload -c:v h264_vaapi o"},
+		{Selection{Kind: CUDA, Encoder: "hevc_nvenc"},
+			"-init_hw_device cuda=hw -filter_hw_device hw -filter:v scale=1280:-2,hwupload_cuda -c:v hevc_nvenc o"},
+		{Selection{Kind: QSV, Device: "/dev/dri/renderD128", Encoder: "h264_qsv"},
+			"-init_hw_device qsv=hw:/dev/dri/renderD128 -filter_hw_device hw -filter:v scale=1280:-2,format=nv12,hwupload -c:v h264_qsv o"},
+		{Selection{Kind: VideoToolbox, Encoder: "h264_videotoolbox"},
+			"-filter:v scale=1280:-2 -c:v h264_videotoolbox o"},
+	}
+	for _, c := range cases {
+		cmd := baseffmpeg.NewCommand()
+		c.sel.Apply(cmd)
+		cmd.Output("o", c.sel.Opts("v", "scale=1280:-2")...)
+		if got := strings.Join(cmd.Args(), " "); got != c.want {
+			t.Errorf("%s\n got %s\nwant %s", c.sel.Kind, got, c.want)
+		}
+	}
+}
+
+func TestProbeArgs(t *testing.T) {
+	b, _ := Lookup(VAAPI)
+	if _, err := b.ProbeArgs(""); err == nil {
+		t.Error("vaapi probe without device should error")
+	}
+	args, err := b.ProbeArgs("/dev/dri/renderD128")
+	if err != nil || !slices.Contains(args, "vaapi=probe:/dev/dri/renderD128") || !slices.Contains(args, "format=nv12,hwupload") {
+		t.Errorf("vaapi probe = %v %v", args, err)
+	}
+	b, _ = Lookup(CUDA)
+	if args, _ := b.ProbeArgs("1"); !slices.Contains(args, "cuda=probe:1") || !slices.Contains(args, "hwupload_cuda") {
+		t.Errorf("cuda probe = %v", args)
 	}
 }

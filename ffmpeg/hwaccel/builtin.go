@@ -32,14 +32,14 @@ func (t codecTable) encoder(codec string) (string, error) {
 	return encoder, nil
 }
 
-func joinFilters(extra []string, tail ...string) string {
-	parts := make([]string, 0, len(extra)+len(tail))
-	for _, f := range extra {
-		if f = strings.TrimSpace(f); f != "" {
-			parts = append(parts, f)
-		}
+// deviceArgs initialises a device named "hw" and points filters at it:
+// -init_hw_device vaapi=hw:/dev/dri/renderD128 -filter_hw_device hw.
+func deviceArgs(typ, device string) []string {
+	spec := typ + "=hw"
+	if device != "" {
+		spec += ":" + device
 	}
-	return strings.Join(append(parts, tail...), ",")
+	return []string{"-init_hw_device", spec, "-filter_hw_device", "hw"}
 }
 
 func probeBase() []string { return []string{"-hide_banner", "-loglevel", "error"} }
@@ -67,14 +67,14 @@ func (vaapiBackend) ProbeArgs(device string) ([]string, error) {
 	return args, nil
 }
 
-func (vaapiBackend) InputArgs(device string) ([]string, error) {
+func (vaapiBackend) DeviceArgs(device string) ([]string, error) {
 	if device == "" {
 		device = defaultVAAPIDevice()
 	}
 	if device == "" {
 		return nil, fmt.Errorf("vaapi device is required")
 	}
-	return []string{"-vaapi_device", device}, nil
+	return deviceArgs("vaapi", device), nil
 }
 
 func (vaapiBackend) Filter(extra ...string) (string, error) {
@@ -108,12 +108,8 @@ func (cudaBackend) ProbeArgs(device string) ([]string, error) {
 	return args, nil
 }
 
-func (cudaBackend) InputArgs(device string) ([]string, error) {
-	args := []string{"-hwaccel", "cuda"}
-	if device != "" {
-		args = append(args, "-hwaccel_device", device)
-	}
-	return args, nil
+func (cudaBackend) DeviceArgs(device string) ([]string, error) {
+	return deviceArgs("cuda", device), nil
 }
 
 func (cudaBackend) Filter(extra ...string) (string, error) {
@@ -140,12 +136,8 @@ func (qsvBackend) ProbeArgs(device string) ([]string, error) {
 	return append(append(probeBase(), "-init_hw_device", spec), probeTail()...), nil
 }
 
-func (qsvBackend) InputArgs(device string) ([]string, error) {
-	args := []string{"-hwaccel", "qsv"}
-	if device != "" {
-		args = append(args, "-qsv_device", device)
-	}
-	return args, nil
+func (qsvBackend) DeviceArgs(device string) ([]string, error) {
+	return deviceArgs("qsv", device), nil
 }
 
 func (qsvBackend) Filter(extra ...string) (string, error) {
@@ -171,7 +163,7 @@ func (videoToolboxBackend) ProbeArgs(string) ([]string, error) {
 	return append(append(probeBase(), "-init_hw_device", "videotoolbox=probe"), probeTail()...), nil
 }
 
-func (videoToolboxBackend) InputArgs(string) ([]string, error) { return nil, nil }
+func (videoToolboxBackend) DeviceArgs(string) ([]string, error) { return nil, nil }
 
 func (videoToolboxBackend) Filter(extra ...string) (string, error) {
 	return joinFilters(extra), nil

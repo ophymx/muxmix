@@ -7,27 +7,20 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 
 	baseffmpeg "github.com/ophymx/muxmix/ffmpeg"
 )
 
-// Cache is the on-disk form of a DetectSystem result. It is keyed by the
-// ffmpeg version string so a binary upgrade invalidates it.
-type Cache struct {
-	FFmpegVersion string        `json:"ffmpeg_version"`
-	DetectedAt    time.Time     `json:"detected_at"`
-	Support       SystemSupport `json:"support"`
-}
+// ErrCacheStale is returned by DetectCached's loader when the saved
+// System is for another ffmpeg version, older than maxAge, or probed a
+// different set of devices than the host has now.
+var ErrCacheStale = errors.New("hwaccel: cached detection is stale")
 
-// ErrCacheStale is returned by LoadCache when the cached ffmpeg version
-// does not match the one requested.
-var ErrCacheStale = errors.New("hwaccel: cache is for a different ffmpeg version")
-
-// SaveCache writes the detection result for the given ffmpeg version.
-func SaveCache(path string, version string, support SystemSupport) error {
-	c := Cache{FFmpegVersion: version, DetectedAt: time.Now().UTC(), Support: support}
-	b, err := json.MarshalIndent(c, "", "  ")
+// Save writes the System as JSON, atomically.
+func (s *System) Save(path string) error {
+	b, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -41,42 +34,70 @@ func SaveCache(path string, version string, support SystemSupport) error {
 	return os.Rename(tmp, path)
 }
 
-// LoadCache reads a cache file. When version is not empty and differs from
-// the cached one, the cache is returned along with ErrCacheStale.
-func LoadCache(path string, version string) (*Cache, error) {
+// Load reads a System saved with Save. It does not check staleness; see
+// DetectCached.
+func Load(path string) (*System, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	var c Cache
-	if err := json.Unmarshal(b, &c); err != nil {
+	var s System
+	if err := json.Unmarshal(b, &s); err != nil {
 		return nil, fmt.Errorf("hwaccel: parse cache %s: %w", path, err)
 	}
-	if version != "" && c.FFmpegVersion != version {
-		return &c, ErrCacheStale
-	}
-	return &c, nil
+	return &s, nil
 }
 
-// DetectSystemCached returns the cached detection for the runner's ffmpeg
-// version when path holds one, and otherwise runs DetectSystem and saves
-// the result. fromCache reports which happened. A cache that cannot be
-// written is not an error: the fresh detection is still returned.
-func DetectSystemCached(ctx context.Context, runner baseffmpeg.Runner, path string, options ProbeOptions) (support SystemSupport, fromCache bool, err error) {
+// DetectCached returns the System saved at path when it is still valid for
+// this ffmpeg binary and host, and otherwise runs Detect and saves the
+// result. fromCache reports which happened. A cache is stale when the
+// ffmpeg version differs, when it is older than maxAge (0 disables the age
+// check), or when the device candidates a backend would probe now differ
+// from the ones it probed then, so a GPU appearing or disappearing is
+// noticed. A cache that cannot be written is not an error: the fresh
+// detection is still returned.
+func DetectCached(ctx context.Context, runner baseffmpeg.Runner, path string, maxAge time.Duration, options ProbeOptions) (sys *System, fromCache bool, err error) {
 	if runner == nil {
 		runner = baseffmpeg.DefaultRunner
 	}
 	v, err := runner.Version(ctx)
 	if err != nil {
-		return SystemSupport{}, false, err
+		return nil, false, err
 	}
-	if c, err := LoadCache(path, v.Version); err == nil {
-		return c.Support, true, nil
+	if cached, err := Load(path); err == nil && cached.stale(v.Version, maxAge, options) == nil {
+		return cached, true, nil
 	}
-	support, err = DetectSystem(ctx, runner, options)
+	sys, err = Detect(ctx, runner, options)
 	if err != nil {
-		return SystemSupport{}, false, err
+		return nil, false, err
 	}
-	_ = SaveCache(path, v.Version, support)
-	return support, false, nil
+	_ = sys.Save(path)
+	return sys, false, nil
+}
+
+// stale returns ErrCacheStale (wrapped with the reason) when the System
+// no longer describes this binary and host.
+func (s *System) stale(version string, maxAge time.Duration, options ProbeOptions) error {
+	if s.Caps == nil || s.Caps.Version == nil || s.Caps.Version.Version != version {
+		return fmt.Errorf("%w: ffmpeg version changed", ErrCacheStale)
+	}
+	if maxAge > 0 && time.Since(s.DetectedAt) > maxAge {
+		return fmt.Errorf("%w: older than %s", ErrCacheStale, maxAge)
+	}
+	for _, kind := range probeKinds(options.Kinds) {
+		if !s.Built(kind) {
+			continue
+		}
+		var probed []string
+		for _, p := range s.Probes[kind] {
+			probed = append(probed, p.Device)
+		}
+		now := probeDevices(kind, options.Devices)
+		slices.Sort(probed)
+		slices.Sort(now)
+		if !slices.Equal(probed, now) {
+			return fmt.Errorf("%w: %s devices changed", ErrCacheStale, kind)
+		}
+	}
+	return nil
 }

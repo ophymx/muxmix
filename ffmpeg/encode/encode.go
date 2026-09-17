@@ -12,7 +12,10 @@
 // scale mapped onto each encoder's preset or cpu-used option.
 //
 // Encoders are chosen from what the build has (caps.Set) and, when a
-// hardware backend is requested, from hwaccel's tables.
+// hardware backend is requested, from hwaccel's tables. Video.HW names a
+// backend outright; to pick one from what the machine can actually run,
+// resolve a hwaccel.Policy against a detected hwaccel.System first and set
+// Encoder from the Selection.
 package encode
 
 import (
@@ -101,8 +104,8 @@ func ChooseEncoder(set *caps.Set, codec Codec, hw hwaccel.Kind) (string, error) 
 	if codec == Copy {
 		return "copy", nil
 	}
-	if hw != hwaccel.None && hw != hwaccel.Auto {
-		name, err := hwaccel.BuildVideoCodec(hw, string(codec))
+	if hw != hwaccel.None {
+		name, err := hwaccel.VideoEncoder(hw, string(codec))
 		if err != nil {
 			return "", err
 		}

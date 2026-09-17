@@ -2,15 +2,19 @@ package hwaccel
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 	"sync"
 )
 
 // Backend describes one hardware acceleration method: how to probe it, how
 // to feed it, and which encoders it provides. Register adds a Backend so
-// Detect, DetectSystem, Select and the Build functions know about it; the
-// built-in backends (VAAPI, CUDA, QSV, VideoToolbox) are registered at init.
+// Detect, Select and Selection know about it; the built-in backends
+// (VAAPI, CUDA, QSV, VideoToolbox) are registered at init.
+//
+// The pipeline a Backend describes is software decode, upload, hardware
+// encode: DeviceArgs initialise the device as global options and Filter
+// ends the filter chain with the upload. Hardware decoding is not part of
+// the interface yet.
 type Backend interface {
 	// Kind is the backend's name, as ffmpeg -hwaccels prints it.
 	Kind() Kind
@@ -20,11 +24,12 @@ type Backend interface {
 	// ProbeArgs returns a complete ffmpeg argument list that succeeds only
 	// when the backend works with the given device.
 	ProbeArgs(device string) ([]string, error)
-	// InputArgs returns the options placed before -i to decode or upload
-	// with this backend.
-	InputArgs(device string) ([]string, error)
-	// Filter returns the -vf chain that moves frames to the device,
-	// after any extra filters.
+	// DeviceArgs returns the global options that initialise the device
+	// for filters and encoders (-init_hw_device, -filter_hw_device). Nil
+	// when the backend needs none.
+	DeviceArgs(device string) ([]string, error)
+	// Filter returns the filter chain that runs extraFilters and then
+	// moves frames to the device.
 	Filter(extraFilters ...string) (string, error)
 	// VideoCodec maps a codec name ("h264") to the backend's encoder.
 	VideoCodec(codec string) (string, error)
@@ -43,8 +48,8 @@ var registry = struct {
 // Register adds a backend. It panics if the kind is already registered.
 func Register(b Backend) {
 	kind := Kind(strings.ToLower(strings.TrimSpace(string(b.Kind()))))
-	if kind == None || kind == Auto {
-		panic("hwaccel: cannot register backend with empty or auto kind")
+	if kind == None {
+		panic("hwaccel: cannot register backend with empty kind")
 	}
 	registry.mu.Lock()
 	defer registry.mu.Unlock()
@@ -79,32 +84,12 @@ func Kinds() []Kind {
 	return append([]Kind(nil), registry.order...)
 }
 
-// SortedKinds returns the registered kinds sorted by name.
-func SortedKinds() []Kind {
-	kinds := Kinds()
-	sort.Slice(kinds, func(i, j int) bool { return kinds[i] < kinds[j] })
-	return kinds
-}
-
-func lookupNoneError(kind Kind) error {
-	return fmt.Errorf("cannot probe hwaccel %q", NormalizeKind(string(kind)))
-}
-
-// lookupOrErr resolves a kind for the Build functions: None means software
-// (nil backend, nil error), Auto is an error because it has not been
-// resolved, and a name that is not registered is an error rather than
-// silently falling back to software.
-func lookupOrErr(kind Kind, what string) (Backend, error) {
-	raw := strings.ToLower(strings.TrimSpace(string(kind)))
-	switch raw {
-	case "":
-		return nil, nil
-	case "auto":
-		return nil, fmt.Errorf("cannot build %s for unresolved hwaccel %q", what, raw)
-	}
-	b, ok := Lookup(Kind(raw))
+// lookupOrErr resolves a kind for the builders: a name that is not
+// registered is an error rather than a silent fall back to software.
+func lookupOrErr(kind Kind) (Backend, error) {
+	b, ok := Lookup(kind)
 	if !ok {
-		return nil, fmt.Errorf("unsupported hwaccel %q", raw)
+		return nil, fmt.Errorf("unsupported hwaccel %q", strings.TrimSpace(string(kind)))
 	}
 	return b, nil
 }
