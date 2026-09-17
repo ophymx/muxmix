@@ -37,6 +37,21 @@ func (s *Section) Find(name string) *Section {
 	return nil
 }
 
+// Child returns the direct child with the given name or unique name, or
+// nil. Prefer it over Find for top-level sections such as "streams", which
+// also appear nested under programs and stream groups.
+func (s *Section) Child(name string) *Section {
+	if s == nil {
+		return nil
+	}
+	for _, c := range s.Children {
+		if c.Name == name || c.UniqueName == name {
+			return c
+		}
+	}
+	return nil
+}
+
 // Has reports whether Find would succeed.
 func (s *Section) Has(name string) bool { return s.Find(name) != nil }
 

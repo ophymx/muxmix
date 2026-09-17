@@ -83,16 +83,20 @@ func TestParseSectionsCaptures(t *testing.T) {
 			if root.Name != "root" || !root.Wrapper || len(root.Children) < 8 {
 				t.Errorf("root = %+v", root)
 			}
-			streams := root.Find("streams")
+			streams := root.Child("streams")
 			if streams == nil || !streams.Array || len(streams.Children) != 1 || streams.Children[0].Name != "stream" {
 				t.Errorf("streams = %+v", streams)
 			}
-			tags := streams.Children[0].Find("tags")
+			tags := streams.Children[0].Child("tags")
 			if tags == nil || !tags.Variable || tags.UniqueName != "stream_tags" {
 				t.Errorf("stream tags = %+v", tags)
 			}
-			if !root.Has("packets_and_frames") || !root.Has("pixel_formats") || root.Has("nonexistent") {
-				t.Error("Has")
+			// Find is depth-first, so a bare "streams" hits the one under programs.
+			if nested := root.Find("streams"); nested == nil || nested.UniqueName != "program_streams" {
+				t.Errorf("Find(streams) = %+v", nested)
+			}
+			if root.Find("stream_tags") != tags || !root.Has("library_versions") || !root.Has("pixel_formats") || root.Has("nonexistent") {
+				t.Error("Find/Has")
 			}
 			var count int
 			root.Walk(func(*Section, int) { count++ })
