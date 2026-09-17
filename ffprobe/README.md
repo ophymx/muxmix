@@ -86,6 +86,11 @@ components) keep their named fields and collect everything else in an
 `stream.ContentLightLevel()`, `stream.DolbyVision()`, `stream.Stereo3D()`,
 `stream.Spherical()`, `packet.SkipSamples()`, and `stream.IsHDR()`.
 Anything else decodes with `SideDataAs[T]` or `DecodeSideData`.
+The enumerated side-data values are typed with constants in ffprobe's own
+spelling, so `s.Stereo3D().Type == ffprobe.StereoSideBySide` and
+`s.Spherical().Projection == ffprobe.ProjectionEquirectangular` need no
+transcription from the ffmpeg source; `Stereo3DType.Packed` says whether
+both eyes share the frame.
 
 `Stream.Rotation()` is the one rotation to use: the clockwise degrees a
 player applies before display, normalised to 0, 90, 180 or 270, read from
@@ -166,6 +171,9 @@ per call (`Timeout(0)` disables it). When either expires ffprobe is
 killed and the error wraps `context.DeadlineExceeded` while still naming
 ffprobe and the input: `ffprobe: movie.mkv: timed out after 5s: context
 deadline exceeded`.
+Build one `Prober` per binary and keep it for the life of the process:
+it caches the version and section tree, so a fresh `Prober` per call
+throws that away and re-runs ffprobe for it.
 
 ## Streaming packets and frames
 

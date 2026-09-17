@@ -45,7 +45,10 @@ import (
 	"time"
 )
 
-// Prober runs an ffprobe binary. It is safe for concurrent use.
+// Prober runs an ffprobe binary. It is safe for concurrent use. Make one
+// per binary and keep it: it caches the binary's version (and, through
+// Sections, its feature set), so a Prober built per call re-runs those
+// probes every time.
 type Prober struct {
 	binary  string
 	env     []string
@@ -87,7 +90,7 @@ func WithTimeout(d time.Duration) ProberOption {
 	return func(p *Prober) { p.timeout = d }
 }
 
-// New returns a Prober.
+// New returns a Prober. Build it once and share it; see Prober.
 func New(opts ...ProberOption) *Prober {
 	p := &Prober{binary: "ffprobe"}
 	for _, o := range opts {

@@ -199,6 +199,9 @@ var safeName = regexp.MustCompile(`[^A-Za-z0-9_.-]+`)
 // sys supplies the build capabilities and hardware probes as for
 // BuildTranscodePlan.
 func BuildPackagePlan(info *Info, sys *hwaccel.System, input, outDir string, o PackageOptions) (*PackageResult, error) {
+	if info == nil || info.Probe == nil {
+		return nil, fmt.Errorf("tasks: package planning needs Info.Probe (use Inspect or InfoFrom)")
+	}
 	if !info.HasVideo {
 		return nil, fmt.Errorf("tasks: %s has no video stream", input)
 	}

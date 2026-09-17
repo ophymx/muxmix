@@ -157,6 +157,14 @@ func Inspect(ctx context.Context, input string, inputOpts ...ffprobe.Option) (*I
 }
 
 // Info is what the tasks learn about an input before working on it.
+// Inspect fills it from a probe and InfoFrom builds it from a probe
+// result you already hold.
+//
+// The image, preview and waveform tasks (Thumbnail, Thumbnails, Preview,
+// Trickplay, Waveform) read only Duration, Width, Height, HasVideo and
+// HasAudio, so an Info built by hand from your own metadata works for
+// them and Probe may be nil. Transcode and Package plan per stream and
+// need Probe; they return an error without it.
 type Info struct {
 	Probe    *ffprobe.Result
 	Duration time.Duration
@@ -168,12 +176,8 @@ type Info struct {
 	HasAudio      bool
 }
 
-// Inspect probes the input and derives the display geometry.
-func (t *Tools) Inspect(ctx context.Context, input string, inputOpts ...ffprobe.Option) (*Info, error) {
-	res, err := t.prober().Probe(ctx, input, inputOpts...)
-	if err != nil {
-		return nil, err
-	}
+// InfoFrom derives an Info from a probe result, the way Inspect does.
+func InfoFrom(res *ffprobe.Result) *Info {
 	info := &Info{Probe: res, Duration: res.Duration(), HasAudio: res.HasAudio()}
 	if v := res.VideoStream(); v != nil {
 		info.HasVideo = true
@@ -182,7 +186,16 @@ func (t *Tools) Inspect(ctx context.Context, input string, inputOpts ...ffprobe.
 			info.Width, info.Height = info.Height, info.Width
 		}
 	}
-	return info, nil
+	return info
+}
+
+// Inspect probes the input and derives the display geometry.
+func (t *Tools) Inspect(ctx context.Context, input string, inputOpts ...ffprobe.Option) (*Info, error) {
+	res, err := t.prober().Probe(ctx, input, inputOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return InfoFrom(res), nil
 }
 
 // fitSize returns the size that fits the source inside maxW x maxH keeping

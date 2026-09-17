@@ -248,6 +248,9 @@ func BuildTranscodePlan(info *Info, sys *hwaccel.System, input, output string, o
 	if container == nil {
 		return nil, fmt.Errorf("tasks: unsupported output container %q", ext(output))
 	}
+	if info == nil || info.Probe == nil {
+		return nil, fmt.Errorf("tasks: transcode planning needs Info.Probe (use Inspect or InfoFrom)")
+	}
 	plan := &TranscodePlan{Input: input, Output: output, Info: info}
 	out := ffmpeg.NewOutput(output)
 	plan.TwoPass = o.TwoPass && !o.Video.Drop && o.Video.Encode.Bitrate != ""

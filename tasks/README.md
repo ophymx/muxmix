@@ -135,8 +135,12 @@ decode.
 Every image and preview task takes `Filters`, a chain that runs before
 scaling: crop away letterboxing, or keep one eye of a side-by-side stereo
 frame with `crop=iw/2:ih:0:0` so thumbnails are not doubled. Every task
-also takes `Info`, the result of an earlier `Inspect`, so a library that
-probes at scan time is not probed again per thumbnail.
+also takes `Info`, the result of an earlier `Inspect` or of `InfoFrom` on
+a stored `ffprobe.Result`, so a library that probes at scan time is not
+probed again per thumbnail. The image, preview and waveform tasks read
+only the scalar fields (`Duration`, `Width`, `Height`, `HasVideo`,
+`HasAudio`), so an `Info` built by hand from your own metadata is
+supported there; `Transcode` and `Package` need `Probe`.
 
 `Tools` lets you supply your own runner, prober and `System`, and run
 options such as `ffmpeg.OnProgress` that apply to every task; `Tools.Run`

@@ -129,27 +129,92 @@ func (d *DisplayMatrix) Values() []int32 {
 
 // Stereo3D describes stereoscopic packing.
 type Stereo3D struct {
-	Type                          string `json:"type"`
-	Inverted                      Bool   `json:"inverted"`
-	View                          string `json:"view"`
-	PrimaryEye                    string `json:"primary_eye"`
-	Baseline                      Int    `json:"baseline"`
-	HorizontalDisparityAdjustment Rat    `json:"horizontal_disparity_adjustment"`
-	HorizontalFieldOfView         Rat    `json:"horizontal_field_of_view"`
+	Type                          Stereo3DType `json:"type"`
+	Inverted                      Bool         `json:"inverted"`
+	View                          StereoView   `json:"view"`        // FFmpeg 7.1 and newer
+	PrimaryEye                    PrimaryEye   `json:"primary_eye"` // FFmpeg 7.1 and newer
+	Baseline                      Int          `json:"baseline"`
+	HorizontalDisparityAdjustment Rat          `json:"horizontal_disparity_adjustment"`
+	HorizontalFieldOfView         Rat          `json:"horizontal_field_of_view"`
 }
+
+// Stereo3DType is how the two views are packed into a frame, spelled as
+// ffprobe prints it (libavutil's av_stereo3d_type_name). Unknown values
+// print as "unknown".
+type Stereo3DType string
+
+const (
+	Stereo2D                 Stereo3DType = "2D"
+	StereoSideBySide         Stereo3DType = "side by side"
+	StereoTopBottom          Stereo3DType = "top and bottom"
+	StereoFrameSequence      Stereo3DType = "frame alternate"
+	StereoCheckerboard       Stereo3DType = "checkerboard"
+	StereoSideBySideQuincunx Stereo3DType = "side by side (quincunx subsampling)"
+	StereoLines              Stereo3DType = "interleaved lines"
+	StereoColumns            Stereo3DType = "interleaved columns"
+	StereoUnspecified        Stereo3DType = "unspecified" // FFmpeg 7.1 and newer
+)
+
+// Packed reports whether both views share one frame (side by side, top
+// and bottom, checkerboard, quincunx, interleaved), as opposed to 2D,
+// frame-sequential or unspecified.
+func (t Stereo3DType) Packed() bool {
+	switch t {
+	case StereoSideBySide, StereoTopBottom, StereoCheckerboard, StereoSideBySideQuincunx, StereoLines, StereoColumns:
+		return true
+	}
+	return false
+}
+
+// StereoView says which view a frame holds when the views are not packed
+// together (av_stereo3d_view_name).
+type StereoView string
+
+const (
+	ViewPacked      StereoView = "packed"
+	ViewLeft        StereoView = "left"
+	ViewRight       StereoView = "right"
+	ViewUnspecified StereoView = "unspecified"
+)
+
+// PrimaryEye is the eye a monoscopic display should show
+// (av_stereo3d_primary_eye_name).
+type PrimaryEye string
+
+const (
+	PrimaryEyeNone  PrimaryEye = "none"
+	PrimaryEyeLeft  PrimaryEye = "left"
+	PrimaryEyeRight PrimaryEye = "right"
+)
 
 // Spherical describes 360° video projection.
 type Spherical struct {
-	Projection  string `json:"projection"`
-	Padding     Int    `json:"padding"`
-	BoundLeft   Int    `json:"bound_left"`
-	BoundTop    Int    `json:"bound_top"`
-	BoundRight  Int    `json:"bound_right"`
-	BoundBottom Int    `json:"bound_bottom"`
-	Yaw         Int    `json:"yaw"`
-	Pitch       Int    `json:"pitch"`
-	Roll        Int    `json:"roll"`
+	Projection  SphericalProjection `json:"projection"`
+	Padding     Int                 `json:"padding"` // cubemap only
+	BoundLeft   Int                 `json:"bound_left"`
+	BoundTop    Int                 `json:"bound_top"`
+	BoundRight  Int                 `json:"bound_right"`
+	BoundBottom Int                 `json:"bound_bottom"`
+	Yaw         Int                 `json:"yaw"`
+	Pitch       Int                 `json:"pitch"`
+	Roll        Int                 `json:"roll"`
 }
+
+// SphericalProjection is the mapping of a 360° or immersive video onto
+// the frame, spelled as ffprobe prints it (av_spherical_projection_name).
+// Releases before 7.1 know only the first three and print "unknown" for
+// the rest.
+type SphericalProjection string
+
+const (
+	ProjectionEquirectangular      SphericalProjection = "equirectangular"
+	ProjectionCubemap              SphericalProjection = "cubemap"
+	ProjectionTiledEquirectangular SphericalProjection = "tiled equirectangular"
+	ProjectionHalfEquirectangular  SphericalProjection = "half equirectangular" // FFmpeg 7.1 and newer
+	ProjectionRectilinear          SphericalProjection = "rectilinear"          // FFmpeg 7.1 and newer
+	ProjectionFisheye              SphericalProjection = "fisheye"              // FFmpeg 7.1 and newer
+	ProjectionParametricImmersive  SphericalProjection = "parametric immersive" // FFmpeg 7.1 and newer
+)
 
 // SkipSamples is the encoder delay and padding on an audio packet.
 type SkipSamples struct {
