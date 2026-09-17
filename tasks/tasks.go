@@ -20,14 +20,23 @@ import (
 	"time"
 
 	"github.com/ophymx/muxmix/ffmpeg"
+	"github.com/ophymx/muxmix/ffmpeg/caps"
+	"github.com/ophymx/muxmix/ffmpeg/encode"
+	"github.com/ophymx/muxmix/ffmpeg/hwaccel"
 	"github.com/ophymx/muxmix/ffprobe"
 )
 
-// Tools holds the runner and prober a task uses. The zero value uses the
-// package defaults.
+// Tools holds the runner, prober and machine capabilities a task uses.
+// The zero value uses the package defaults and software encoding.
 type Tools struct {
 	Runner ffmpeg.Runner
 	Prober *ffprobe.Prober
+	// System is what the ffmpeg binary can do on this machine, from
+	// hwaccel.Detect or hwaccel.DetectCached. Tasks choose encoders from
+	// its build capabilities, validate each command against them before
+	// running, and resolve every job's hardware Policy against its probe
+	// results. Nil means software encoding and no validation.
+	System *hwaccel.System
 	// RunOptions are passed to every ffmpeg run, for progress or logging.
 	RunOptions []ffmpeg.RunOption
 }
@@ -47,6 +56,60 @@ func (t *Tools) prober() *ffprobe.Prober {
 		return t.Prober
 	}
 	return ffprobe.Default
+}
+
+// caps returns the build capabilities from System, or nil.
+func (t *Tools) caps() *caps.Set {
+	if t == nil || t.System == nil {
+		return nil
+	}
+	return t.System.Caps
+}
+
+func (t *Tools) system() *hwaccel.System {
+	if t == nil {
+		return nil
+	}
+	return t.System
+}
+
+func capsOf(sys *hwaccel.System) *caps.Set {
+	if sys == nil {
+		return nil
+	}
+	return sys.Caps
+}
+
+// resolveHW applies a job's hardware policy to its video settings. An
+// explicit Encoder is left alone. An explicit encode.Video.HW under a
+// software policy counts as requiring that backend; without a System it
+// is trusted as-is with the backend's default device. On a hardware
+// selection the Encoder and HW are filled in and PixFmt is cleared, since
+// the upload chain fixes the frame format.
+func resolveHW(sys *hwaccel.System, policy hwaccel.Policy, v *encode.Video) (hwaccel.Selection, string, error) {
+	if v.Encoder != "" {
+		return hwaccel.Selection{}, "", nil
+	}
+	if policy.Mode == hwaccel.Software && v.HW != hwaccel.None {
+		if sys == nil {
+			enc, err := hwaccel.VideoEncoder(v.HW, string(v.Codec))
+			if err != nil {
+				return hwaccel.Selection{}, "", fmt.Errorf("tasks: %w", err)
+			}
+			sel := hwaccel.Selection{Kind: v.HW, Encoder: enc, Codec: string(v.Codec)}
+			v.Encoder, v.PixFmt = enc, ""
+			return sel, "", nil
+		}
+		policy = hwaccel.RequireHardware(v.HW)
+	}
+	sel, reason, err := policy.Resolve(sys, string(v.Codec))
+	if err != nil {
+		return sel, reason, fmt.Errorf("tasks: %w", err)
+	}
+	if sel.Hardware() {
+		v.Encoder, v.HW, v.PixFmt = sel.Encoder, sel.Kind, ""
+	}
+	return sel, reason, nil
 }
 
 func (t *Tools) run(ctx context.Context, cmd *ffmpeg.Command) error {

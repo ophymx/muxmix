@@ -33,7 +33,7 @@ plan, err := tasks.Transcode(ctx, "in.mkv", "out.mp4", tasks.TranscodeOptions{
         MaxHeight:  1080,                                             // scale down 4K
     },
     Audio: tasks.AudioRule{CopyCodecs: tasks.AllCodecs, Languages: []string{"eng", "jpn"}},
-    Caps:  set, // choose encoders from this build and validate before running
+    HW:    hwaccel.PreferHardware(), // hardware encoding when the machine has it
 })
 fmt.Print(plan)
 // 0 video h264: copy (codec accepted by container)
@@ -53,6 +53,28 @@ MP4. `PlanTranscode` returns the plan and `Command` without running, so
 you can inspect or adjust it first; `BuildTranscodePlan` works from an
 existing probe result.
 
+## Capabilities and hardware
+
+Detect what the machine can do once, at startup, and give it to the
+`Tools` every job runs through:
+
+```go
+sys, _, err := hwaccel.DetectCached(ctx, nil, cacheDir+"/ffmpeg.json", 24*time.Hour, hwaccel.ProbeOptions{})
+tools := &tasks.Tools{System: sys}
+plan, err := tools.Transcode(ctx, in, out, tasks.TranscodeOptions{HW: hwaccel.PreferHardware()})
+```
+
+With a `System` set, tasks pick encoders the build actually has, validate
+every command with `caps.Check` before running it, and resolve each job's
+`HW` policy against the probe results: `PreferHardware` uses the first
+backend that initialised and has an encoder for the codec, and otherwise
+falls back to software with the reason in the plan
+(`… → libx264 (…; software: vaapi: probe failed: …)`); `RequireHardware`
+makes that an error. A hardware selection adds the device initialisation
+to the command, uploads frames after any scaling, and skips the software
+`pix_fmt` default. `PlannedStream.HW` and `PackageResult.HW` record what
+was chosen. Without a `System`, everything is software and unchecked.
+
 ## HLS and DASH packaging
 
 `Package` encodes a bitrate ladder in one pass and writes the playlists:
@@ -63,7 +85,7 @@ res, err := tasks.Package(ctx, "movie.mkv", "out/movie", tasks.PackageOptions{
     Renditions:     tasks.DefaultLadder(1080), // 1080p/720p/480p/360p, or your own rungs
     AudioLanguages: []string{"eng", "jpn"}, // alternate audio renditions; default: main audio
     Video:          encode.Video{Speed: encode.Fast},
-    Caps:           set,
+    HW:             hwaccel.PreferHardware(hwaccel.CUDA, hwaccel.VAAPI),
 })
 // res.Master → out/movie/master.m3u8, res.Renditions[i].Playlist, res.Audio[j].Playlist
 ```

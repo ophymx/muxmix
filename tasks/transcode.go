@@ -77,11 +77,11 @@ type TranscodeOptions struct {
 	Video     VideoRule
 	Audio     AudioRule
 	Subtitles SubtitleRule
-	// Caps chooses encoders from what the build has and validates the
-	// command. Nil skips both.
-	Caps *caps.Set
-	// HW requests a hardware encoder for video.
-	HW hwaccel.Kind
+	// HW says whether to encode video in hardware: the zero value is
+	// software, hwaccel.PreferHardware falls back to software, and
+	// hwaccel.RequireHardware fails without it. It is resolved against the
+	// System on the Tools; the plan records the outcome per stream.
+	HW hwaccel.Policy
 	// DropMetadata and DropChapters stop the input's global metadata and
 	// chapters from being carried over.
 	DropMetadata bool
@@ -101,7 +101,10 @@ type PlannedStream struct {
 	Language string
 	Action   Action
 	Encoder  string // encoder used when Action is Encode
-	Reason   string // why this action was chosen
+	// HW is the hardware path when Action is Encode; its zero value is
+	// software.
+	HW     hwaccel.Selection
+	Reason string // why this action was chosen
 }
 
 // TranscodePlan is the resolved transcode: the streams and the command.
@@ -133,7 +136,10 @@ func (p *TranscodePlan) String() string {
 			fmt.Fprintf(&sb, " [%s]", s.Language)
 		}
 		fmt.Fprintf(&sb, ": %s", s.Action)
-		if s.Encoder != "" {
+		switch {
+		case s.HW.Hardware():
+			fmt.Fprintf(&sb, " → %s", s.HW)
+		case s.Encoder != "":
 			fmt.Fprintf(&sb, " → %s", s.Encoder)
 		}
 		if s.Reason != "" {
@@ -167,20 +173,22 @@ func (t *Tools) PlanTranscode(ctx context.Context, input, output string, o Trans
 	if err != nil {
 		return nil, err
 	}
-	plan, err := BuildTranscodePlan(info, input, output, o)
+	plan, err := BuildTranscodePlan(info, t.system(), input, output, o)
 	if err != nil {
 		return nil, err
 	}
-	if o.Caps != nil {
-		if err := caps.Check(ctx, o.Caps, t.runner(), plan.Command); err != nil {
+	if set := t.caps(); set != nil {
+		if err := caps.Check(ctx, set, t.runner(), plan.Command); err != nil {
 			return plan, err
 		}
 	}
 	return plan, nil
 }
 
-// BuildTranscodePlan builds a plan from an already probed input.
-func BuildTranscodePlan(info *Info, input, output string, o TranscodeOptions) (*TranscodePlan, error) {
+// BuildTranscodePlan builds a plan from an already probed input. sys
+// supplies the build capabilities and hardware probes; nil means software
+// encoders chosen without checking the build.
+func BuildTranscodePlan(info *Info, sys *hwaccel.System, input, output string, o TranscodeOptions) (*TranscodePlan, error) {
 	container := containerFor(output)
 	if container == nil {
 		return nil, fmt.Errorf("tasks: unsupported output container %q", ext(output))
@@ -189,19 +197,23 @@ func BuildTranscodePlan(info *Info, input, output string, o TranscodeOptions) (*
 	out := ffmpeg.NewOutput(output)
 
 	// Video.
+	var hw hwaccel.Selection
 	if !o.Video.Drop {
 		vrule := o.Video
-		if vrule.Encode.Codec == "" && vrule.Encode.Encoder == "" {
+		defaulted := vrule.Encode.Codec == "" && vrule.Encode.Encoder == ""
+		if defaulted {
 			vrule.Encode.Codec = encode.H264
 			if vrule.Encode.Quality == 0 && vrule.Encode.Bitrate == "" {
 				vrule.Encode.Quality = 23
 			}
-			if vrule.Encode.PixFmt == "" {
-				vrule.Encode.PixFmt = "yuv420p"
-			}
 		}
-		if o.HW != "" {
-			vrule.Encode.HW = o.HW
+		var hwReason string
+		var err error
+		if hw, hwReason, err = resolveHW(sys, o.HW, &vrule.Encode); err != nil {
+			return nil, err
+		}
+		if defaulted && !hw.Hardware() && vrule.Encode.PixFmt == "" {
+			vrule.Encode.PixFmt = "yuv420p"
 		}
 		idx := 0
 		for _, s := range info.Probe.VideoStreams() {
@@ -221,15 +233,22 @@ func BuildTranscodePlan(info *Info, input, output string, o TranscodeOptions) (*
 					ps.Action, ps.Reason = Copy, "codec accepted by container"
 					out.Options.Add(ffmpeg.Map(fmt.Sprintf("0:%d", ps.Input)), ffmpeg.PerStream("v", idx, ffmpeg.Copy("v")))
 				} else {
-					enc, err := vrule.Encode.ResolveEncoder(o.Caps)
+					enc, err := vrule.Encode.ResolveEncoder(capsOf(sys))
 					if err != nil {
 						return nil, err
 					}
-					ps.Action, ps.Encoder = Encode, enc
+					ps.Action, ps.Encoder, ps.HW = Encode, enc, hw
 					ps.Reason = encodeReason(s.CodecName, container, needsScale)
+					if hwReason != "" {
+						ps.Reason += "; software: " + hwReason
+					}
 					opts := vrule.Encode.OptsFor(enc)
+					var filters []string
 					if needsScale {
-						opts = append(opts, ffmpeg.FilterString("v", scaleFilter(vrule.MaxWidth, vrule.MaxHeight)))
+						filters = append(filters, scaleFilter(vrule.MaxWidth, vrule.MaxHeight))
+					}
+					if chain := hw.Filter(filters...); chain != "" {
+						opts = append(opts, ffmpeg.FilterString("v", chain))
 					}
 					out.Options.Add(ffmpeg.Map(fmt.Sprintf("0:%d", ps.Input)), ffmpeg.PerStream("v", idx, opts...))
 				}
@@ -267,7 +286,7 @@ func BuildTranscodePlan(info *Info, input, output string, o TranscodeOptions) (*
 				out.Options.Add(ffmpeg.Map(fmt.Sprintf("0:%d", ps.Input)), ffmpeg.PerStream("a", idx, ffmpeg.Copy("a")))
 				idx++
 			default:
-				enc, err := arule.Encode.ResolveEncoder(o.Caps)
+				enc, err := arule.Encode.ResolveEncoder(capsOf(sys))
 				if err != nil {
 					return nil, err
 				}
@@ -338,6 +357,7 @@ func BuildTranscodePlan(info *Info, input, output string, o TranscodeOptions) (*
 		Inputs:  []*ffmpeg.Input{ffmpeg.NewInput(input)},
 		Outputs: []*ffmpeg.Output{out},
 	}
+	hw.Apply(plan.Command)
 	return plan, nil
 }
 

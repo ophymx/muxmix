@@ -8,9 +8,9 @@ in `ffprobe/helpers.go`, the typed side data in `ffprobe/sidedata.go`, and
 
 ## 2. hwaccel: consolidated arg builder (done)
 
-`hwaccel.InputOpt(kind, device)` and `hwaccel.EncodeOpt(kind, codec, filters...)` return
-`ffmpeg.Opt` values that plug straight into `ffmpeg.Command`; `BuildEncodeArgs` remains for
-raw argument lists.
+`hwaccel.Selection` renders the hardware pieces of a command: `Apply` adds the device
+initialisation, `Filter` wraps filters in the upload chain, `Opts` puts filter and codec on
+an output stream.
 
 ## 3. ffmpeg: higher-level codec builder (done)
 
@@ -22,8 +22,10 @@ or CMAF ladders; `ffmpeg.TwoPass` orchestrates two-pass encodes.
 
 ## 4. hwaccel: marshal/unmarshal SystemSupport for caching (done)
 
-`hwaccel.SaveCache`, `LoadCache` and `DetectSystemCached` store the detection keyed by the
-ffmpeg version string; a binary upgrade invalidates it.
+`hwaccel.System` bundles the build's `caps.Set` with the runtime probes; `DetectCached`
+stores it as JSON and re-detects when the ffmpeg version, the file's age or the device
+nodes change. `tasks.Tools.System` holds it for every job, and `hwaccel.Policy` says per
+job whether to prefer or require hardware.
 
 ## 5. hwaccel: registerable Kind interface (done)
 

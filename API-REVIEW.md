@@ -25,11 +25,11 @@ Scratch programs: scratchpad/review-{ffmpeg,ffprobe,tasks}/ (session-local).
 
 ## HIGH
 
-1. OPEN, needs design discussion. tasks: `TranscodeOptions.HW = VAAPI/QSV` builds a command that cannot run: no
+1. DONE (Tools.System + hwaccel.Policy/Selection). tasks: `TranscodeOptions.HW = VAAPI/QSV` builds a command that cannot run: no
    `-vaapi_device`, no `hwupload`, software `scale` feeding a hw encoder, `-pix_fmt
    yuv420p` forced. `hwaccel.Backend.InputArgs/Filter` exist but tasks never calls
    them. Works for NVENC only by luck. (tasks/transcode.go:359, packaging.go:197)
-2. OPEN, needs design discussion. hwaccel/encode: `hwaccel.Auto` silently resolves to software in `encode`
+2. DONE (Auto removed; Policy resolves against System). hwaccel/encode: `hwaccel.Auto` silently resolves to software in `encode`
    (encode.go:104) and errors in `hwaccel.BuildInputArgs`. Nothing resolves it.
    Delete `Auto`, or have tasks resolve via `SystemSupport.Select` with the reason
    recorded in `PlannedStream.Reason`.
@@ -84,11 +84,11 @@ ffprobe
 tasks / encode / caps / hwaccel
 - Progress cannot be attached per job: `RunOptions` lives on `Tools`. Add
   `Tools.Run(ctx, cmd, ...RunOption)` and `TranscodePlan.Run(...)`.
-- Two capability detections, two caches: `caps.Detect` (10 sequential runs) and
+- DONE. Two capability detections, two caches: `caps.Detect` (10 sequential runs) and
   `hwaccel.DetectSystem` overlap; caps has no cache; hwaccel cache `DetectedAt`
   never consulted. Have hwaccel take an existing `*caps.Set`; add
   `caps.DetectCached`; parallelise listings; add a TTL.
-- `Rendition.Video` override replaces the base `encode.Video` instead of merging;
+- DONE (mergeVideo). `Rendition.Video` override replaces the base `encode.Video` instead of merging;
   `{Height:360, Video:&encode.Video{Profile:"main"}}` errors "needs a Codec".
 - Package silently upscales and reports wrong Width for rungs above source height.
 - No per-stream filter hook (`VideoRule.Filters`, `AudioRule.Filters`); loudnorm

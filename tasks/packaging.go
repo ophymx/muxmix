@@ -45,6 +45,9 @@ type Rendition struct {
 	MaxRate string // VBV cap (default: Bitrate × 1.07)
 	BufSize string // VBV buffer (default: Bitrate × 1.5)
 	// Video overrides the shared encode settings for this rendition.
+	// Fields left zero inherit from PackageOptions.Video; naming a Codec
+	// or Encoder opts the rung out of the shared encoder and hardware
+	// selection.
 	Video *encode.Video
 }
 
@@ -91,9 +94,10 @@ type PackageOptions struct {
 	// ManifestName the DASH MPD (default "manifest.mpd").
 	MasterName   string
 	ManifestName string
-	Caps         *caps.Set
-	HW           hwaccel.Kind
-	Extra        []ffmpeg.Opt
+	// HW is the hardware encoding policy, as for TranscodeOptions. One
+	// backend serves every rung.
+	HW    hwaccel.Policy
+	Extra []ffmpeg.Opt
 }
 
 // PackagedRendition is one video variant in the output.
@@ -118,6 +122,10 @@ type PackageResult struct {
 	Renditions []PackagedRendition
 	Audio      []PackagedAudio
 	Command    *ffmpeg.Command
+	// HW is the hardware path the video rungs use; zero means software.
+	// HWReason explains a software outcome under a Prefer policy.
+	HW       hwaccel.Selection
+	HWReason string
 }
 
 // Package encodes a bitrate ladder and writes HLS and/or DASH into outDir.
@@ -146,12 +154,12 @@ func (t *Tools) PlanPackage(ctx context.Context, input, outDir string, o Package
 	if err != nil {
 		return nil, err
 	}
-	res, err := BuildPackagePlan(info, input, outDir, o)
+	res, err := BuildPackagePlan(info, t.system(), input, outDir, o)
 	if err != nil {
 		return nil, err
 	}
-	if o.Caps != nil {
-		if err := caps.Check(ctx, o.Caps, t.runner(), res.Command); err != nil {
+	if set := t.caps(); set != nil {
+		if err := caps.Check(ctx, set, t.runner(), res.Command); err != nil {
 			return res, err
 		}
 	}
@@ -161,7 +169,9 @@ func (t *Tools) PlanPackage(ctx context.Context, input, outDir string, o Package
 var safeName = regexp.MustCompile(`[^A-Za-z0-9_.-]+`)
 
 // BuildPackagePlan builds the packaging command from an already probed input.
-func BuildPackagePlan(info *Info, input, outDir string, o PackageOptions) (*PackageResult, error) {
+// sys supplies the build capabilities and hardware probes as for
+// BuildTranscodePlan.
+func BuildPackagePlan(info *Info, sys *hwaccel.System, input, outDir string, o PackageOptions) (*PackageResult, error) {
 	if !info.HasVideo {
 		return nil, fmt.Errorf("tasks: %s has no video stream", input)
 	}
@@ -191,11 +201,12 @@ func BuildPackagePlan(info *Info, input, outDir string, o PackageOptions) (*Pack
 	if base.Codec == "" && base.Encoder == "" {
 		base.Codec = encode.H264
 	}
-	if base.PixFmt == "" && o.HW == hwaccel.None {
-		base.PixFmt = "yuv420p"
+	hw, hwReason, err := resolveHW(sys, o.HW, &base)
+	if err != nil {
+		return nil, err
 	}
-	if o.HW != "" {
-		base.HW = o.HW
+	if base.PixFmt == "" && !hw.Hardware() {
+		base.PixFmt = "yuv420p"
 	}
 	audio := o.Audio
 	if audio.Codec == "" && audio.Encoder == "" {
@@ -206,7 +217,7 @@ func BuildPackagePlan(info *Info, input, outDir string, o PackageOptions) (*Pack
 	}
 	segSecs := o.SegmentDuration.Seconds()
 
-	res := &PackageResult{Dir: outDir}
+	res := &PackageResult{Dir: outDir, HW: hw, HWReason: hwReason}
 	out := ffmpeg.NewOutput("")
 	var graph []string
 	var varMap []string
@@ -231,14 +242,11 @@ func BuildPackagePlan(info *Info, input, outDir string, o PackageOptions) (*Pack
 		}
 		name = safeName.ReplaceAllString(name, "_")
 		h := even(r.Height)
-		graph = append(graph, fmt.Sprintf("%sscale=w=-2:h=%d[v%dout]", labels[i], h, i))
+		graph = append(graph, fmt.Sprintf("%s%s[v%dout]", labels[i], hw.Filter(fmt.Sprintf("scale=w=-2:h=%d", h)), i))
 
 		v := base
 		if r.Video != nil {
-			v = *r.Video
-			if v.HW == "" {
-				v.HW = base.HW
-			}
+			v = mergeVideo(base, *r.Video)
 		}
 		v.Bitrate, v.MaxRate, v.BufSize = r.Bitrate, r.MaxRate, r.BufSize
 		if v.MaxRate == "" {
@@ -247,7 +255,7 @@ func BuildPackagePlan(info *Info, input, outDir string, o PackageOptions) (*Pack
 		if v.BufSize == "" {
 			v.BufSize = scaleRate(r.Bitrate, 1.5)
 		}
-		enc, err := v.ResolveEncoder(o.Caps)
+		enc, err := v.ResolveEncoder(capsOf(sys))
 		if err != nil {
 			return nil, err
 		}
@@ -282,7 +290,7 @@ func BuildPackagePlan(info *Info, input, outDir string, o PackageOptions) (*Pack
 			}
 		}
 	}
-	aenc, err := audio.ResolveEncoder(o.Caps)
+	aenc, err := audio.ResolveEncoder(capsOf(sys))
 	if err != nil && len(audioStreams) > 0 {
 		return nil, err
 	}
@@ -371,6 +379,7 @@ func BuildPackagePlan(info *Info, input, outDir string, o PackageOptions) (*Pack
 		Inputs:  []*ffmpeg.Input{ffmpeg.NewInput(input)},
 		Outputs: []*ffmpeg.Output{out},
 	}
+	hw.Apply(res.Command)
 	res.Command.GlobalOptions(ffmpeg.FilterComplexString(strings.Join(graph, ";")))
 	return res, nil
 }
@@ -394,3 +403,39 @@ func scaleRate(rate string, f float64) string {
 }
 
 func ftoa(f float64) string { return fmt.Sprintf("%g", f) }
+
+// mergeVideo fills the zero fields of an override from the shared
+// settings. An override that names its own Codec or Encoder does not
+// inherit the shared encoder or hardware backend.
+func mergeVideo(base, over encode.Video) encode.Video {
+	v := over
+	ownEncoder := over.Codec != "" || over.Encoder != ""
+	if !ownEncoder {
+		v.Codec, v.Encoder, v.HW = base.Codec, base.Encoder, base.HW
+	}
+	if v.Quality == 0 {
+		v.Quality = base.Quality
+	}
+	if v.Speed == encode.DefaultSpeed {
+		v.Speed = base.Speed
+	}
+	if v.Profile == "" {
+		v.Profile = base.Profile
+	}
+	if v.Level == "" {
+		v.Level = base.Level
+	}
+	if v.Tune == "" {
+		v.Tune = base.Tune
+	}
+	if v.PixFmt == "" && (base.HW == hwaccel.None || ownEncoder) {
+		v.PixFmt = base.PixFmt
+	}
+	if v.KeyframeInterval == 0 {
+		v.KeyframeInterval = base.KeyframeInterval
+	}
+	if v.Extra == nil {
+		v.Extra = base.Extra
+	}
+	return v
+}

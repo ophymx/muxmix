@@ -37,7 +37,7 @@ func args(p *TranscodePlan) string { return strings.Join(p.Command.Args(), " ") 
 func TestPlanMatroskaToMP4(t *testing.T) {
 	// multi.mkv: h264 video, aac eng (default), opus deu, subrip eng forced, attachment.
 	info := captureInfo(t, "multi_mkv.basic.json")
-	plan, err := BuildTranscodePlan(info, "multi.mkv", "out.mp4", TranscodeOptions{
+	plan, err := BuildTranscodePlan(info, nil, "multi.mkv", "out.mp4", TranscodeOptions{
 		Video: VideoRule{CopyCodecs: AllCodecs},
 		Audio: AudioRule{CopyCodecs: AllCodecs},
 	})
@@ -62,7 +62,7 @@ func TestPlanMatroskaToMP4(t *testing.T) {
 
 func TestPlanEncodeAndFilter(t *testing.T) {
 	info := captureInfo(t, "multi_mkv.basic.json")
-	plan, err := BuildTranscodePlan(info, "multi.mkv", "out.mkv", TranscodeOptions{
+	plan, err := BuildTranscodePlan(info, nil, "multi.mkv", "out.mkv", TranscodeOptions{
 		Video:        VideoRule{Encode: encode.Video{Codec: encode.HEVC, Quality: 24, Speed: encode.Fast}, MaxWidth: 16},
 		Audio:        AudioRule{Languages: []string{"deu"}, CopyCodecs: AllCodecs},
 		Subtitles:    SubtitleRule{Drop: true},
@@ -82,7 +82,7 @@ func TestPlanEncodeAndFilter(t *testing.T) {
 
 func TestPlanDefaultsAndDrops(t *testing.T) {
 	info := captureInfo(t, "cover_mp3.basic.json") // mp3 audio + png cover art
-	plan, err := BuildTranscodePlan(info, "in.mp3", "out.m4a", TranscodeOptions{})
+	plan, err := BuildTranscodePlan(info, nil, "in.mp3", "out.m4a", TranscodeOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,16 +94,16 @@ func TestPlanDefaultsAndDrops(t *testing.T) {
 	}
 
 	// Every stream dropped is an error.
-	if _, err := BuildTranscodePlan(info, "in.mp3", "out.mp4", TranscodeOptions{Video: VideoRule{Drop: true}, Audio: AudioRule{Drop: true}}); err == nil {
+	if _, err := BuildTranscodePlan(info, nil, "in.mp3", "out.mp4", TranscodeOptions{Video: VideoRule{Drop: true}, Audio: AudioRule{Drop: true}}); err == nil {
 		t.Error("expected error when nothing is kept")
 	}
-	if _, err := BuildTranscodePlan(info, "in.mp3", "out.xyz", TranscodeOptions{}); err == nil {
+	if _, err := BuildTranscodePlan(info, nil, "in.mp3", "out.xyz", TranscodeOptions{}); err == nil {
 		t.Error("expected error for unknown container")
 	}
 
 	// WebM: copy allowed but nothing accepted, so everything is encoded.
 	mkv := captureInfo(t, "multi_mkv.basic.json")
-	plan, err = BuildTranscodePlan(mkv, "in.mkv", "out.webm", TranscodeOptions{
+	plan, err = BuildTranscodePlan(mkv, nil, "in.mkv", "out.webm", TranscodeOptions{
 		Video: VideoRule{CopyCodecs: AllCodecs, Encode: encode.Video{Codec: encode.VP9, Quality: 30}},
 		Audio: AudioRule{CopyCodecs: AllCodecs, First: true, Encode: encode.Audio{Codec: encode.Opus, Bitrate: "96k"}},
 	})

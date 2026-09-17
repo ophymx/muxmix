@@ -31,7 +31,7 @@ func TestDefaultLadder(t *testing.T) {
 
 func TestBuildPackagePlanHLS(t *testing.T) {
 	info := captureInfo(t, "multi_mkv.basic.json") // 32x32, 25 fps, aac eng default + opus deu
-	res, err := BuildPackagePlan(info, "in.mkv", "out", PackageOptions{
+	res, err := BuildPackagePlan(info, nil, "in.mkv", "out", PackageOptions{
 		Renditions:      []Rendition{{Name: "hi", Height: 32, Bitrate: "100k"}, {Name: "lo", Height: 16, Bitrate: "50k", MaxRate: "60k", BufSize: "90k"}},
 		SegmentDuration: 2 * time.Second,
 		Video:           encode.Video{Speed: encode.Fastest},
@@ -62,7 +62,7 @@ func TestBuildPackagePlanHLS(t *testing.T) {
 	}
 
 	// Two audio languages, MPEG-TS segments.
-	res, err = BuildPackagePlan(info, "in.mkv", "out", PackageOptions{
+	res, err = BuildPackagePlan(info, nil, "in.mkv", "out", PackageOptions{
 		Segments: MPEGTS, AudioLanguages: []string{"deu", "eng"},
 	})
 	if err != nil {
@@ -81,7 +81,7 @@ func TestBuildPackagePlanHLS(t *testing.T) {
 
 func TestBuildPackagePlanDASH(t *testing.T) {
 	info := captureInfo(t, "basic_mp4.basic.json")
-	res, err := BuildPackagePlan(info, "in.mp4", "out", PackageOptions{Format: CMAF})
+	res, err := BuildPackagePlan(info, nil, "in.mp4", "out", PackageOptions{Format: CMAF})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,12 +96,12 @@ func TestBuildPackagePlanDASH(t *testing.T) {
 	if res.Manifest != filepath.Join("out", "manifest.mpd") || res.Master != filepath.Join("out", "master.m3u8") {
 		t.Errorf("result = %+v", res)
 	}
-	if _, err := BuildPackagePlan(info, "in.mp4", "out", PackageOptions{Format: DASH, Segments: MPEGTS}); err == nil {
+	if _, err := BuildPackagePlan(info, nil, "in.mp4", "out", PackageOptions{Format: DASH, Segments: MPEGTS}); err == nil {
 		t.Error("DASH with TS should fail")
 	}
 	// Video-only source: no audio group.
 	raw := captureInfo(t, "raw_h264.basic.json")
-	res, err = BuildPackagePlan(raw, "in.h264", "out", PackageOptions{Renditions: []Rendition{{Height: 32, Bitrate: "100k"}}})
+	res, err = BuildPackagePlan(raw, nil, "in.h264", "out", PackageOptions{Renditions: []Rendition{{Height: 32, Bitrate: "100k"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
