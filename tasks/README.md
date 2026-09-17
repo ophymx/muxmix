@@ -53,6 +53,29 @@ MP4. `PlanTranscode` returns the plan and `Command` without running, so
 you can inspect or adjust it first; `BuildTranscodePlan` works from an
 existing probe result.
 
+## HLS and DASH packaging
+
+`Package` encodes a bitrate ladder in one pass and writes the playlists:
+
+```go
+res, err := tasks.Package(ctx, "movie.mkv", "out/movie", tasks.PackageOptions{
+    Format:         tasks.HLS,              // or DASH, or CMAF for both over one segment set
+    Renditions:     tasks.DefaultLadder(1080), // 1080p/720p/480p/360p, or your own rungs
+    AudioLanguages: []string{"eng", "jpn"}, // alternate audio renditions; default: main audio
+    Video:          encode.Video{Speed: encode.Fast},
+    Caps:           set,
+})
+// res.Master → out/movie/master.m3u8, res.Renditions[i].Playlist, res.Audio[j].Playlist
+```
+
+The source is decoded once and split, each rung is scaled and encoded
+with its own bit rate and VBV settings, keyframes are forced on every
+segment boundary so renditions switch cleanly, audio goes into an
+`EXT-X-MEDIA` group rather than being duplicated per variant, and each
+variant lands in its own directory with an `init` segment and numbered
+fMP4 (or MPEG-TS) segments. DASH output uses segment templates with a
+timeline; CMAF adds the HLS playlists to the same segments.
+
 What each of the others handles for you:
 
 - **Thumbnail** seeks before decoding (fast), defaults to 10% in to skip

@@ -4,7 +4,7 @@ Go packages for driving `ffmpeg` and `ffprobe`.
 
 | Package                | What it does                                                          |
 |------------------------|-----------------------------------------------------------------------|
-| `tasks`                | Transcode planning, thumbnails, trickplay sheets, previews, waveforms |
+| `tasks`                | Transcode planning, HLS/DASH packaging, thumbnails, trickplay, previews |
 | `ffprobe`              | Typed, version-tolerant ffprobe results; streaming packet/frame reads |
 | `ffmpeg`               | Structured commands, live progress, graceful cancel, version parsing  |
 | `ffmpeg/analyze`       | Typed results from analysis filters: loudness, silence, black, crop, scenes |
