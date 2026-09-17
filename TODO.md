@@ -34,3 +34,8 @@ VideoToolbox backends are the reference implementations in `builtin.go`.
 
 `caps.Check` validates encoders, decoders, muxers, demuxers, filters, pixel formats,
 hardware devices and encoder option values against the installed build before running.
+
+## 7. Release checklist
+
+- Run `matrix/test.sh` (all eight images) and CI green.
+- API review of exported identifiers, godoc `Example` functions, then tag v0.1.

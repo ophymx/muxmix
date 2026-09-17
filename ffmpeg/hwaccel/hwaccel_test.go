@@ -16,7 +16,7 @@ import (
 func writeFakeFFmpeg(t *testing.T, body string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "fake-ffmpeg.sh")
-	script := "#!/usr/bin/env bash\nset -euo pipefail\n" + body + "\n"
+	script := "#!/bin/sh\nset -eu\n" + body + "\n" // POSIX sh: Alpine images have no bash
 	if err := os.WriteFile(path, []byte(script), 0o700); err != nil {
 		t.Fatalf("failed to write fake ffmpeg script: %v", err)
 	}
@@ -60,7 +60,7 @@ func TestDetect(t *testing.T) {
 	}
 
 	fake := writeFakeFFmpeg(t, `
-if [[ "${1:-}" == "-hide_banner" ]]; then
+if [ "${1:-}" = "-hide_banner" ]; then
   shift
 fi
 
@@ -168,11 +168,11 @@ func TestDetectSystem(t *testing.T) {
 	}
 
 	fake := writeFakeFFmpeg(t, `
-if [[ "${1:-}" == "-hide_banner" ]]; then
+if [ "${1:-}" = "-hide_banner" ]; then
   shift
 fi
 
-if [[ "${1:-}" == "-hwaccels" ]]; then
+if [ "${1:-}" = "-hwaccels" ]; then
   cat <<'EOF'
 Hardware acceleration methods:
 vaapi
@@ -181,7 +181,7 @@ EOF
   exit 0
 fi
 
-if [[ "${1:-}" == "-encoders" ]]; then
+if [ "${1:-}" = "-encoders" ]; then
   cat <<'EOF'
 Encoders:
  V....D h264_vaapi           H.264/AVC (VAAPI)
@@ -191,14 +191,15 @@ EOF
 fi
 
 args="$*"
-if [[ "$args" == *"-init_hw_device vaapi=probe:/dev/fake-renderD128"* ]]; then
-  exit 0
-fi
-
-if [[ "$args" == *"-init_hw_device qsv=probe:/dev/fake-renderD129"* ]]; then
-  echo "qsv runtime unavailable" >&2
-  exit 1
-fi
+case "$args" in
+  *"-init_hw_device vaapi=probe:/dev/fake-renderD128"*)
+    exit 0
+    ;;
+  *"-init_hw_device qsv=probe:/dev/fake-renderD129"*)
+    echo "qsv runtime unavailable" >&2
+    exit 1
+    ;;
+esac
 
 echo "unexpected args: $*" >&2
 exit 1

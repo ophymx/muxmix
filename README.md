@@ -25,7 +25,10 @@ build's version, capability listings and progress output. The captures are
 committed and drive the conformance tests, so `go test ./...` needs no
 ffmpeg install for those. Tests that exercise a live binary skip when it is
 absent. CI runs on Linux and macOS with ffmpeg installed and on Windows
-without it.
+without it. `matrix/test.sh` runs the whole suite, live tests included,
+inside every matrix container using the host Go toolchain, so the runner,
+progress pipe, cancellation, analysis filters and tasks are exercised
+against each release line before a release.
 
 ```sh
 go generate ./ffprobe   # regenerate types from the XSDs and captures
