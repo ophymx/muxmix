@@ -106,6 +106,9 @@ type TranscodeOptions struct {
 	TwoPass bool
 	// Extra output options appended verbatim.
 	Extra []ffmpeg.Opt
+	// Info is an already probed description of the input, from Inspect;
+	// nil probes it. Reuse it when the same file gets several tasks.
+	Info *Info
 }
 
 // PlannedStream is one input stream and what will happen to it.
@@ -221,7 +224,7 @@ func PlanTranscode(ctx context.Context, input, output string, o TranscodeOptions
 
 // PlanTranscode probes the input and builds the command without running it.
 func (t *Tools) PlanTranscode(ctx context.Context, input, output string, o TranscodeOptions) (*TranscodePlan, error) {
-	info, err := t.Inspect(ctx, input)
+	info, err := t.info(ctx, input, o.Info)
 	if err != nil {
 		return nil, err
 	}

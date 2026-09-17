@@ -25,6 +25,13 @@ type ThumbnailOptions struct {
 	// Image sets the format and quality; the format defaults from the
 	// output extension and quality to the encoder default.
 	Image encode.Image
+	// Filters run before scaling, as one filter chain: crop away
+	// letterboxing ("crop=iw:ih-140"), keep one eye of a side-by-side
+	// stereo frame ("crop=iw/2:ih:0:0"), or any other region or fix-up.
+	Filters []string
+	// Info is an already probed description of the input, from Inspect;
+	// nil probes it. Reuse it when the same file gets several tasks.
+	Info *Info
 }
 
 // Thumbnail writes one frame of input to output (JPEG, PNG or WebP by
@@ -35,7 +42,7 @@ func Thumbnail(ctx context.Context, input, output string, o ThumbnailOptions) (t
 
 // Thumbnail writes one frame of input to output.
 func (t *Tools) Thumbnail(ctx context.Context, input, output string, o ThumbnailOptions) (time.Duration, error) {
-	info, err := t.Inspect(ctx, input)
+	info, err := t.info(ctx, input, o.Info)
 	if err != nil {
 		return 0, err
 	}
@@ -59,6 +66,7 @@ func (t *Tools) Thumbnail(ctx context.Context, input, output string, o Thumbnail
 	if o.Smart {
 		filters = append(filters, "thumbnail")
 	}
+	filters = append(filters, o.Filters...)
 	filters = append(filters, scaleFilter(o.Width, o.Height))
 
 	cmd := ffmpeg.NewCommand().
@@ -93,6 +101,13 @@ type ThumbnailsOptions struct {
 	Width    int
 	Height   int
 	Image    encode.Image
+	// Filters run before scaling, as one filter chain: crop away
+	// letterboxing ("crop=iw:ih-140"), keep one eye of a side-by-side
+	// stereo frame ("crop=iw/2:ih:0:0"), or any other region or fix-up.
+	Filters []string
+	// Info is an already probed description of the input, from Inspect;
+	// nil probes it. Reuse it when the same file gets several tasks.
+	Info *Info
 }
 
 // ThumbnailFile is one written thumbnail.
@@ -109,7 +124,7 @@ func Thumbnails(ctx context.Context, input, pattern string, o ThumbnailsOptions)
 
 // Thumbnails writes a series of frames.
 func (t *Tools) Thumbnails(ctx context.Context, input, pattern string, o ThumbnailsOptions) ([]ThumbnailFile, error) {
-	info, err := t.Inspect(ctx, input)
+	info, err := t.info(ctx, input, o.Info)
 	if err != nil {
 		return nil, err
 	}
@@ -144,10 +159,8 @@ func (t *Tools) Thumbnails(ctx context.Context, input, pattern string, o Thumbna
 		return nil, fmt.Errorf("tasks: interval too small for the duration")
 	}
 
-	filters := []string{
-		fmt.Sprintf("fps=%s", strconv.FormatFloat(1/interval.Seconds(), 'f', -1, 64)),
-		scaleFilter(o.Width, o.Height),
-	}
+	filters := append([]string{fmt.Sprintf("fps=%s", strconv.FormatFloat(1/interval.Seconds(), 'f', -1, 64))}, o.Filters...)
+	filters = append(filters, scaleFilter(o.Width, o.Height))
 	cmd := ffmpeg.NewCommand().
 		Input(input, ffmpeg.Seek(start)).
 		Output(pattern, append(append(outputImageOpts(filters, count), ffmpeg.Set("start_number", "1")), img.Opts()...)...)

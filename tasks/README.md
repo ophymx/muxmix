@@ -132,6 +132,12 @@ Sizing respects rotation metadata: a phone video recorded upright is
 treated as portrait, which is what ffmpeg produces since it auto-rotates on
 decode.
 
+Every image and preview task takes `Filters`, a chain that runs before
+scaling: crop away letterboxing, or keep one eye of a side-by-side stereo
+frame with `crop=iw/2:ih:0:0` so thumbnails are not doubled. Every task
+also takes `Info`, the result of an earlier `Inspect`, so a library that
+probes at scan time is not probed again per thumbnail.
+
 `Tools` lets you supply your own runner, prober and `System`, and run
 options such as `ffmpeg.OnProgress` that apply to every task; `Tools.Run`
 executes any command with them. Every task creates its output directory.

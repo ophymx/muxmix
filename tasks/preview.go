@@ -31,6 +31,13 @@ type PreviewOptions struct {
 	Image encode.Image
 	// Loop count for animated images: 0 loops forever.
 	Loop int
+	// Filters run before scaling, as one filter chain: crop away
+	// letterboxing ("crop=iw:ih-140"), keep one eye of a side-by-side
+	// stereo frame ("crop=iw/2:ih:0:0"), or any other region or fix-up.
+	Filters []string
+	// Info is an already probed description of the input, from Inspect;
+	// nil probes it. Reuse it when the same file gets several tasks.
+	Info *Info
 }
 
 // Preview writes a short excerpt of input to output.
@@ -40,7 +47,7 @@ func Preview(ctx context.Context, input, output string, o PreviewOptions) error 
 
 // Preview writes a short excerpt of input to output.
 func (t *Tools) Preview(ctx context.Context, input, output string, o PreviewOptions) error {
-	info, err := t.Inspect(ctx, input)
+	info, err := t.info(ctx, input, o.Info)
 	if err != nil {
 		return err
 	}
@@ -61,7 +68,8 @@ func (t *Tools) Preview(ctx context.Context, input, output string, o PreviewOpti
 	if o.Width <= 0 {
 		o.Width = 320
 	}
-	scale := scaleFilter(o.Width, 0)
+	// pre is the caller's filters followed by the scale, as one chain.
+	pre := joinFilters(append(append([]string(nil), o.Filters...), scaleFilter(o.Width, 0))...)
 
 	in := ffmpeg.NewInput(input, ffmpeg.Seek(start), ffmpeg.Duration(o.Duration))
 	var out *ffmpeg.Output
@@ -74,7 +82,7 @@ func (t *Tools) Preview(ctx context.Context, input, output string, o PreviewOpti
 		// Two-pass palette in one graph: split, build a palette from the
 		// whole excerpt, then dither with it.
 		graph := fmt.Sprintf("[0:v]fps=%s,%s,split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle",
-			fpsStr(fps), scale)
+			fpsStr(fps), pre)
 		out = ffmpeg.NewOutput(output, ffmpeg.NoAudio(), ffmpeg.Set("loop", strconv.Itoa(o.Loop)))
 		cmd := &ffmpeg.Command{Inputs: []*ffmpeg.Input{in}, Outputs: []*ffmpeg.Output{out}}
 		cmd.GlobalOptions(ffmpeg.FilterComplexString(graph))
@@ -93,7 +101,7 @@ func (t *Tools) Preview(ctx context.Context, input, output string, o PreviewOpti
 			img.Quality = 75
 		}
 		out = ffmpeg.NewOutput(output, append(
-			outputImageOpts([]string{"fps=" + fpsStr(fps), scale}, 0),
+			outputImageOpts([]string{"fps=" + fpsStr(fps), pre}, 0),
 			append(img.Opts(), ffmpeg.Set("loop", strconv.Itoa(o.Loop)))...)...)
 	default:
 		v := o.Video
@@ -113,7 +121,7 @@ func (t *Tools) Preview(ctx context.Context, input, output string, o PreviewOpti
 		if err != nil {
 			return err
 		}
-		filters := []string{scale}
+		filters := []string{pre}
 		if o.FPS > 0 {
 			filters = append([]string{"fps=" + fpsStr(o.FPS)}, filters...)
 		}

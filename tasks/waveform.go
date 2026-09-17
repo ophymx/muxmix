@@ -18,6 +18,9 @@ type WaveformOptions struct {
 	SplitChannels bool
 	// Stream selects the audio stream (default 0).
 	Stream int
+	// Info is an already probed description of the input, from Inspect;
+	// nil probes it. Reuse it when the same file gets several tasks.
+	Info *Info
 }
 
 // Waveform renders the audio of input to a PNG (or any image format ffmpeg
@@ -28,7 +31,7 @@ func Waveform(ctx context.Context, input, output string, o WaveformOptions) erro
 
 // Waveform renders the audio of input to an image.
 func (t *Tools) Waveform(ctx context.Context, input, output string, o WaveformOptions) error {
-	info, err := t.Inspect(ctx, input)
+	info, err := t.info(ctx, input, o.Info)
 	if err != nil {
 		return err
 	}

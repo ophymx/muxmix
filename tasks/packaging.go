@@ -98,6 +98,9 @@ type PackageOptions struct {
 	// backend serves every rung.
 	HW    hwaccel.Policy
 	Extra []ffmpeg.Opt
+	// Info is an already probed description of the input, from Inspect;
+	// nil probes it. Reuse it when the same file gets several tasks.
+	Info *Info
 }
 
 // PackagedRendition is one video variant in the output.
@@ -174,7 +177,7 @@ func PlanPackage(ctx context.Context, input, outDir string, o PackageOptions) (*
 
 // PlanPackage probes the input and builds the command without running it.
 func (t *Tools) PlanPackage(ctx context.Context, input, outDir string, o PackageOptions) (*PackageResult, error) {
-	info, err := t.Inspect(ctx, input)
+	info, err := t.info(ctx, input, o.Info)
 	if err != nil {
 		return nil, err
 	}

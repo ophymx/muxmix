@@ -34,6 +34,14 @@ type TrickplayOptions struct {
 	// "https://cdn.example.com/v/123/". Empty means relative names.
 	BaseURL string
 	Image   encode.Image
+	// Filters run before scaling, as one filter chain, for example
+	// "crop=iw/2:ih:0:0" to keep one eye of side-by-side stereo. The tile
+	// height then follows the filtered frame's aspect ratio and is read
+	// back from the first sheet.
+	Filters []string
+	// Info is an already probed description of the input, from Inspect;
+	// nil probes it. Reuse it when the same file gets several tasks.
+	Info *Info
 }
 
 // TrickplayResult describes generated sprite sheets.
@@ -64,7 +72,7 @@ func Trickplay(ctx context.Context, input, outDir string, o TrickplayOptions) (*
 
 // Trickplay generates sprite sheets and a WebVTT index into outDir.
 func (t *Tools) Trickplay(ctx context.Context, input, outDir string, o TrickplayOptions) (*TrickplayResult, error) {
-	info, err := t.Inspect(ctx, input)
+	info, err := t.info(ctx, input, o.Info)
 	if err != nil {
 		return nil, err
 	}
@@ -121,16 +129,29 @@ func (t *Tools) Trickplay(ctx context.Context, input, outDir string, o Trickplay
 		return nil, err
 	}
 	pattern := filepath.Join(outDir, o.SheetPattern)
-	filters := []string{
-		fmt.Sprintf("fps=%s", strconv.FormatFloat(1/interval.Seconds(), 'f', -1, 64)),
-		fmt.Sprintf("scale=%d:%d", tileW, tileH),
-		fmt.Sprintf("tile=%dx%d", o.Columns, o.Rows),
+	scale := fmt.Sprintf("scale=%d:%d", tileW, tileH)
+	if len(o.Filters) > 0 {
+		// The filters may change the aspect ratio, so let the height follow
+		// and measure it afterwards.
+		scale = fmt.Sprintf("scale=%d:-2", tileW)
 	}
+	filters := append([]string{fmt.Sprintf("fps=%s", strconv.FormatFloat(1/interval.Seconds(), 'f', -1, 64))}, o.Filters...)
+	filters = append(filters, scale, fmt.Sprintf("tile=%dx%d", o.Columns, o.Rows))
 	cmd := ffmpeg.NewCommand().
 		Input(input).
 		Output(pattern, append(append(outputImageOpts(filters, sheets), ffmpeg.Set("start_number", "1")), img.Opts()...)...)
 	if err := t.run(ctx, cmd); err != nil {
 		return nil, err
+	}
+	if len(o.Filters) > 0 {
+		sheet, err := t.prober().Probe(ctx, fmt.Sprintf(pattern, 1))
+		if err != nil {
+			return nil, err
+		}
+		if v := sheet.VideoStream(); v != nil {
+			_, h := v.Resolution()
+			tileH = h / o.Rows
+		}
 	}
 
 	tp := &TrickplayResult{

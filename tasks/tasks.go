@@ -143,6 +143,14 @@ func ensureDir(output string) error {
 	return nil
 }
 
+// info returns the caller's Info or probes the input.
+func (t *Tools) info(ctx context.Context, input string, given *Info) (*Info, error) {
+	if given != nil {
+		return given, nil
+	}
+	return t.Inspect(ctx, input)
+}
+
 // Inspect probes input with the default Tools.
 func Inspect(ctx context.Context, input string, inputOpts ...ffprobe.Option) (*Info, error) {
 	return Default.Inspect(ctx, input, inputOpts...)
