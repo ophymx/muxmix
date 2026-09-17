@@ -520,6 +520,8 @@ func PassLogFile(prefix string) Opt { return Set("passlogfile", prefix) }
 
 // X264Params and X265Params pass encoder-private key=value strings.
 func X264Params(params string) Opt { return Set("x264-params", params) }
+
+// X265Params passes libx265's colon-separated private options (-x265-params).
 func X265Params(params string) Opt { return Set("x265-params", params) }
 
 // ─── filters ───────────────────────────────────────────────────────────────

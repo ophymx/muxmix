@@ -47,11 +47,19 @@ It knows which codecs each container accepts for copying (MP4 will not
 take Opus or FLAC without player trouble, WebM takes only VP8/VP9/AV1 and
 Opus/Vorbis), converts text subtitles to the container's format and drops
 bitmap ones it cannot hold, skips cover art unless asked, keeps only the
-main video and optionally the main audio, filters by language, carries
-global metadata and chapters unless told not to, and adds `+faststart` for
-MP4. `PlanTranscode` returns the plan and `Command` without running, so
-you can inspect or adjust it first; `BuildTranscodePlan` works from an
-existing probe result.
+main video (`KeepAll` for every one) and every audio stream (`MainOnly`
+for just the main one), filters by language, carries global metadata and
+chapters unless told not to, and adds `+faststart` for MP4.
+`VideoRule.Filters` and `AudioRule.Filters` add a filter chain to every
+encoded stream of that type, for a crop or a loudnorm second pass from
+`analyze`. `TwoPass` runs a bitrate-targeted encode through
+`ffmpeg.TwoPass`.
+
+`PlanTranscode` returns the plan and `Command` without running, so you
+can inspect or adjust it first, and `plan.Run(ctx, tools, opts...)` runs
+it with per-job run options and `ffmpeg.TotalDuration` already set from
+the probe, so an `OnProgress` callback gets `Fraction` and `ETA`.
+`BuildTranscodePlan` works from an existing probe result.
 
 ## Capabilities and hardware
 
@@ -96,7 +104,10 @@ segment boundary so renditions switch cleanly, audio goes into an
 `EXT-X-MEDIA` group rather than being duplicated per variant, and each
 variant lands in its own directory with an `init` segment and numbered
 fMP4 (or MPEG-TS) segments. DASH output uses segment templates with a
-timeline; CMAF adds the HLS playlists to the same segments.
+timeline; CMAF adds the HLS playlists to the same segments. Rungs taller
+than the source are not upscaled; they are listed in `Skipped`. A
+rendition's `Video` override inherits every field it leaves zero.
+`PlanPackage` and `res.Run` split planning from running as for transcodes.
 
 What each of the others handles for you:
 
@@ -121,5 +132,6 @@ Sizing respects rotation metadata: a phone video recorded upright is
 treated as portrait, which is what ffmpeg produces since it auto-rotates on
 decode.
 
-`Tools` lets you supply your own runner and prober, and run options such as
-`ffmpeg.OnProgress` that apply to every task.
+`Tools` lets you supply your own runner, prober and `System`, and run
+options such as `ffmpeg.OnProgress` that apply to every task; `Tools.Run`
+executes any command with them. Every task creates its output directory.

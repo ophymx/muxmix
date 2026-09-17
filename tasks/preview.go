@@ -78,6 +78,9 @@ func (t *Tools) Preview(ctx context.Context, input, output string, o PreviewOpti
 		out = ffmpeg.NewOutput(output, ffmpeg.NoAudio(), ffmpeg.Set("loop", strconv.Itoa(o.Loop)))
 		cmd := &ffmpeg.Command{Inputs: []*ffmpeg.Input{in}, Outputs: []*ffmpeg.Output{out}}
 		cmd.GlobalOptions(ffmpeg.FilterComplexString(graph))
+		if err := ensureDir(output); err != nil {
+			return err
+		}
 		return t.run(ctx, cmd)
 	case ".webp":
 		fps := o.FPS
@@ -130,6 +133,9 @@ func (t *Tools) Preview(ctx context.Context, input, output string, o PreviewOpti
 		out = ffmpeg.NewOutput(output, opts...)
 	}
 	cmd := &ffmpeg.Command{Inputs: []*ffmpeg.Input{in}, Outputs: []*ffmpeg.Output{out}}
+	if err := ensureDir(output); err != nil {
+		return err
+	}
 	return t.run(ctx, cmd)
 }
 

@@ -122,10 +122,29 @@ type PackageResult struct {
 	Renditions []PackagedRendition
 	Audio      []PackagedAudio
 	Command    *ffmpeg.Command
+	// Duration of the source, for progress.
+	Duration time.Duration
 	// HW is the hardware path the video rungs use; zero means software.
 	// HWReason explains a software outcome under a Prefer policy.
 	HW       hwaccel.Selection
 	HWReason string
+	// Skipped names the renditions taller than the source, which are not
+	// produced rather than upscaled.
+	Skipped []string
+}
+
+// Run executes the package command through t (nil for Default), adding
+// ffmpeg.TotalDuration from the probe so progress callbacks get Fraction
+// and ETA. opts are applied after the Tools' RunOptions.
+func (r *PackageResult) Run(ctx context.Context, t *Tools, opts ...ffmpeg.RunOption) error {
+	if t == nil {
+		t = Default
+	}
+	var all []ffmpeg.RunOption
+	if r.Duration > 0 {
+		all = append(all, ffmpeg.TotalDuration(r.Duration))
+	}
+	return t.run(ctx, r.Command, append(all, opts...)...)
 }
 
 // Package encodes a bitrate ladder and writes HLS and/or DASH into outDir.
@@ -142,10 +161,15 @@ func (t *Tools) Package(ctx context.Context, input, outDir string, o PackageOpti
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		return nil, err
 	}
-	if err := t.run(ctx, res.Command); err != nil {
+	if err := res.Run(ctx, t); err != nil {
 		return res, err
 	}
 	return res, nil
+}
+
+// PlanPackage builds the package with the default Tools without running it.
+func PlanPackage(ctx context.Context, input, outDir string, o PackageOptions) (*PackageResult, error) {
+	return Default.PlanPackage(ctx, input, outDir, o)
 }
 
 // PlanPackage probes the input and builds the command without running it.
@@ -193,9 +217,18 @@ func BuildPackagePlan(info *Info, sys *hwaccel.System, input, outDir string, o P
 	if o.ManifestName == "" {
 		o.ManifestName = "manifest.mpd"
 	}
-	renditions := o.Renditions
-	if len(renditions) == 0 {
+	var renditions, skipped []Rendition
+	for _, r := range o.Renditions {
+		if info.Height > 0 && r.Height > info.Height {
+			skipped = append(skipped, r)
+			continue
+		}
+		renditions = append(renditions, r)
+	}
+	if len(o.Renditions) == 0 {
 		renditions = DefaultLadder(info.Height)
+	} else if len(renditions) == 0 {
+		return nil, fmt.Errorf("tasks: every rendition is taller than the %dp source", info.Height)
 	}
 	base := o.Video
 	if base.Codec == "" && base.Encoder == "" {
@@ -217,7 +250,14 @@ func BuildPackagePlan(info *Info, sys *hwaccel.System, input, outDir string, o P
 	}
 	segSecs := o.SegmentDuration.Seconds()
 
-	res := &PackageResult{Dir: outDir, HW: hw, HWReason: hwReason}
+	res := &PackageResult{Dir: outDir, HW: hw, HWReason: hwReason, Duration: info.Duration}
+	for _, r := range skipped {
+		name := r.Name
+		if name == "" {
+			name = fmt.Sprintf("%dp", r.Height)
+		}
+		res.Skipped = append(res.Skipped, name)
+	}
 	out := ffmpeg.NewOutput("")
 	var graph []string
 	var varMap []string

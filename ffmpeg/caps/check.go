@@ -71,7 +71,10 @@ func (c *Checker) AddHelp(h *Help) {
 }
 
 // Check validates a Command against the build and returns a *CheckError
-// listing every problem, or nil.
+// listing every problem, or nil. Encoder, muxer and filter option values
+// are checked against their option tables, which are fetched through
+// runner on demand; with a nil runner (and no help preloaded with
+// AddHelp) only names are checked and option values pass unexamined.
 func Check(ctx context.Context, set *Set, runner ffmpeg.Runner, cmd *ffmpeg.Command) error {
 	return NewChecker(set, runner).Check(ctx, cmd)
 }

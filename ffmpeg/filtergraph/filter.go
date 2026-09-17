@@ -31,6 +31,7 @@ func (f *Filter) WithInstance(instance string) *Filter {
 	return f
 }
 
+// WithArgs sets a custom FilterArguments implementation.
 func (f *Filter) WithArgs(args FilterArguments) *Filter {
 	f.Args = args
 	return f

@@ -64,6 +64,9 @@ func (t *Tools) Thumbnail(ctx context.Context, input, output string, o Thumbnail
 	cmd := ffmpeg.NewCommand().
 		Input(input, ffmpeg.Seek(at)).
 		Output(output, append(outputImageOpts(filters, 1), img.Opts()...)...)
+	if err := ensureDir(output); err != nil {
+		return 0, err
+	}
 	return at, t.run(ctx, cmd)
 }
 
@@ -148,6 +151,9 @@ func (t *Tools) Thumbnails(ctx context.Context, input, pattern string, o Thumbna
 	cmd := ffmpeg.NewCommand().
 		Input(input, ffmpeg.Seek(start)).
 		Output(pattern, append(append(outputImageOpts(filters, count), ffmpeg.Set("start_number", "1")), img.Opts()...)...)
+	if err := ensureDir(pattern); err != nil {
+		return nil, err
+	}
 	if err := t.run(ctx, cmd); err != nil {
 		return nil, err
 	}

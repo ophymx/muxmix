@@ -7,20 +7,20 @@ Scratch programs: scratchpad/review-{ffmpeg,ffprobe,tasks}/ (session-local).
 
 ## Cross-cutting
 
-- No `Example` functions anywhere. Release checklist item; also the best fix for most
+- DONE. No `Example` functions anywhere. Release checklist item; also the best fix for most
   "had to look it up" friction below.
-- `ffmpeg` has three functional-option types: `Opt` (command), `Option` (runner),
+- DONE (RunnerOption/RunOption). `ffmpeg` has three functional-option types: `Opt` (command), `Option` (runner),
   `RunOption` (per-run). `Env` appends, `WithEnv` replaces; `Stderr` vs `WithStderr`.
   Proposal: keep `Opt`; rename `Option` -> `RunnerOption`; give runner-constructor
   options a `With` prefix and run-scoped ones none, consistently.
-- Nil-runner positional arg on `analyze.*` and `ffmpeg.TwoPass` calls
+- DONE (Analyzer, TwoPassOptions.Runner). Nil-runner positional arg on `analyze.*` and `ffmpeg.TwoPass` calls
   (`analyze.Silence(ctx, nil, in, ...)`). Proposal: `analyze.Analyzer{Runner}` with
   methods plus package funcs bound to the default; `TwoPassOptions.Runner`.
-- Progress lacks fraction/ETA everywhere except TwoPass, which has its own `Duration`
+- DONE (TotalDuration, plan.Run). Progress lacks fraction/ETA everywhere except TwoPass, which has its own `Duration`
   + `Fraction`. Proposal: `ffmpeg.TotalDuration(d) RunOption` filling
   `Progress.Fraction` and `Progress.ETA`; tasks plans inject it from `Info.Duration`.
-- "Unknown" sentinels vary: -1 ints, NaN floats, `Open`, invalid `Rat`. Pick one rule.
-- Untyped errors in several places (`Command.Validate`, analyze "no JSON block",
+- DONE (documented: -1, NaN for dB). "Unknown" sentinels vary: -1 ints, NaN floats, `Open`, invalid `Rat`. Pick one rule.
+- DONE (ErrInvalidCommand, ErrNoResult; ffprobe in progress). Untyped errors in several places (`Command.Validate`, analyze "no JSON block",
   ffprobe AVERROR codes unexported). Add sentinels so callers can `errors.Is/As`.
 
 ## HIGH
@@ -33,7 +33,7 @@ Scratch programs: scratchpad/review-{ffmpeg,ffprobe,tasks}/ (session-local).
    (encode.go:104) and errors in `hwaccel.BuildInputArgs`. Nothing resolves it.
    Delete `Auto`, or have tasks resolve via `SystemSupport.Select` with the reason
    recorded in `PlannedStream.Reason`.
-3. DONE (doc + CRF rounding; scale unification still open). encode: `Video.Quality` doc says "0 lossless" but 0 means encoder default
+3. DONE (doc + CRF rounding). Scales deliberately stay each family's native one (CRF, VBR 1-10, JPEG 1-100), documented. encode: `Video.Quality` doc says "0 lossless" but 0 means encoder default
    (video.go:19, 101). Three quality scales disagree in direction and type: Video
    0-51 lower-better float64, Audio.VBR 1-10 higher-better int, Image 1-100
    higher-better int. Proposal: one `Quality int` 1..100 higher-better on all three,
@@ -53,17 +53,17 @@ Scratch programs: scratchpad/review-{ffmpeg,ffprobe,tasks}/ (session-local).
 ## MEDIUM
 
 ffmpeg
-- `FPS`/`Volume` render `%.2f` (23.976 -> 23.98); named filter args sort
+- DONE. `FPS`/`Volume` render `%.2f` (23.976 -> 23.98); named filter args sort
   alphabetically (`scale=h=-2:w=1280`). Use FormatFloat(-1) and ordered args.
-- Global-only opts (`FilterComplex`, `InitHWDevice`, `LogLevel`) compile inside
+- DONE. Global-only opts (`FilterComplex`, `InitHWDevice`, `LogLevel`) compile inside
   `Output(...)` and pass `Validate`. Add a global-only/input-only table to Validate.
-- Version parsing: git builds (`N-118000-g...`) parse to 0.0 so `AtLeast(4,4)` is
+- DONE. Version parsing: git builds (`N-118000-g...`) parse to 0.0 so `AtLeast(4,4)` is
   false on master. Add `Snapshot bool`, `Patch`, `LibraryAtLeast(name, maj, min)`.
-- Runner-injected `-progress pipe:3`/`-stats_period` land after the first input's
+- DONE. Runner-injected `-progress pipe:3`/`-stats_period` land after the first input's
   options in `Result.Args` (ffmpeg.go:498). Prepend at index 0.
-- filtergraph doc code blocks not indented (render as prose); README overlay
+- DONE. filtergraph doc code blocks not indented (render as prose); README overlay
   example stale; `FilterChain.parent` set but never read.
-- `Run` returns non-nil `*Result` with the error, undocumented; `run` accepts nil ctx.
+- DONE. `Run` returns non-nil `*Result` with the error, undocumented; `run` accepts nil ctx.
 
 ffprobe
 - `Result.Format` is `*Format` but `Streams` is `[]Stream` and helpers return
@@ -82,7 +82,7 @@ ffprobe
   `Prober.Version(ctx)` + `VersionInfo.AtLeast`; mention `Sections()` in doc.go.
 
 tasks / encode / caps / hwaccel
-- Progress cannot be attached per job: `RunOptions` lives on `Tools`. Add
+- DONE (Tools.Run, plan.Run, res.Run). Progress cannot be attached per job: `RunOptions` lives on `Tools`. Add
   `Tools.Run(ctx, cmd, ...RunOption)` and `TranscodePlan.Run(...)`.
 - DONE. Two capability detections, two caches: `caps.Detect` (10 sequential runs) and
   `hwaccel.DetectSystem` overlap; caps has no cache; hwaccel cache `DetectedAt`
@@ -90,38 +90,38 @@ tasks / encode / caps / hwaccel
   `caps.DetectCached`; parallelise listings; add a TTL.
 - DONE (mergeVideo). `Rendition.Video` override replaces the base `encode.Video` instead of merging;
   `{Height:360, Video:&encode.Video{Profile:"main"}}` errors "needs a Codec".
-- Package silently upscales and reports wrong Width for rungs above source height.
-- No per-stream filter hook (`VideoRule.Filters`, `AudioRule.Filters`); loudnorm
+- DONE (Skipped). Package silently upscales and reports wrong Width for rungs above source height.
+- DONE. No per-stream filter hook (`VideoRule.Filters`, `AudioRule.Filters`); loudnorm
   needs a global `-af` via `Extra` that collides with per-stream `-filter:v:0`.
-- Output-dir creation inconsistent: Trickplay/Package `MkdirAll`, Thumbnail/
+- DONE (ensureDir everywhere). Output-dir creation inconsistent: Trickplay/Package `MkdirAll`, Thumbnail/
   Preview/Waveform don't, and the failure is "exit 251 Input/output error".
-- Two-pass not reachable from `Transcode`; add `TranscodeOptions.TwoPass bool`.
-- `caps.Check` with nil runner silently skips option-value checks (check.go:190).
+- DONE. Two-pass not reachable from `Transcode`; add `TranscodeOptions.TwoPass bool`.
+- DONE (documented). `caps.Check` with nil runner silently skips option-value checks (check.go:190).
 
 ## LOW
 
-- Alias bloat: `EncoderOption`/`FormatOption` = `Set`; `KeyframeInterval`;
+- DONE (ffmpeg/filtergraph/encode aliases removed; ffprobe in progress). Alias bloat: `EncoderOption`/`FormatOption` = `Set`; `KeyframeInterval`;
   filtergraph `Resize`/`SetFrameRate`/`SetPixelFormat`; `encode.PNG/WebP/GIF` vs
   `PNGImage/WebPImage/AnimatedGIF`; ffprobe `ErrUnsupportedFile`, `Prober.Exists`,
   `Result.Error`.
-- Polarity/naming: `VideoRule.All` vs `AudioRule.First`; `NoFastStart` doc describes
+- DONE (KeepAll/MainOnly, NoFastStart doc, Speed.String; AllCodecs kept as documented sentinel). Polarity/naming: `VideoRule.All` vs `AudioRule.First`; `NoFastStart` doc describes
   `FastStart`; `AllCodecs = []Codec{"*"}` sentinel (prefer a `CopyPolicy` type);
   `tasks.Copy` (Action) vs `encode.Copy` (Codec); `Speed`/`Kind` lack `String()`.
-- hwaccel exports many undocumented identifiers (`Detect`, `DetectSystem`, `Probe`,
+- DONE. hwaccel exports many undocumented identifiers (`Detect`, `DetectSystem`, `Probe`,
   `Support`, `ParseDetection`, `SystemSortProbes`, ...); `baseffmpeg` alias leaks
   into godoc; `InputOpt` swallows errors while `EncodeOpt` returns them; unexport the
   `Build*Args` string builders.
-- Package-level vs `Tools` surface uneven (`PlanTranscode`/`Inspect` only on Tools).
-- Missing docs: `BufSize`, `Tune`, `Profile`, `Level`, `PassLogFile`, `No*`,
+- DONE. Package-level vs `Tools` surface uneven (`PlanTranscode`/`Inspect` only on Tools).
+- DONE. Missing docs: `BufSize`, `Tune`, `Profile`, `Level`, `PassLogFile`, `No*`,
   `TimeSpec`, all `Concat*` types, `ParseConcat`; `OutputTSOffset` and `NewCommand`
   docs reference wrong names; ffprobe `MinNits` shares `MaxNits` comment.
-- `Concat` needs `Version: "1.0"` by hand; add `NewConcat(files ...string)`.
+- DONE. `Concat` needs `Version: "1.0"` by hand; add `NewConcat(files ...string)`.
 - `FrameRate()` returns 90000 fps for attached pictures.
 - `Packet.IsKeyframe`/`IsDiscard` positional on the flags string; use ContainsRune.
 - `Disposition` is a pointer with only three accessors; make it a value or generate
   `Has(flag)`.
 - ffprobe `Timeout(d)` duplicates context and loses the "ffprobe:" prefix.
-- `SilenceOptions{NoiseDB:0}` means default; 0 dB is legal. Document or use pointer.
+- DONE (documented). `SilenceOptions{NoiseDB:0}` means default; 0 dB is legal. Document or use pointer.
 
 ## Keep
 

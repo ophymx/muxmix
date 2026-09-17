@@ -59,5 +59,8 @@ func (t *Tools) Waveform(ctx context.Context, input, output string, o WaveformOp
 		GlobalOptions(ffmpeg.FilterComplexString(graph)).
 		Input(input).
 		Output(output, ffmpeg.Frames("v", 1))
+	if err := ensureDir(output); err != nil {
+		return err
+	}
 	return t.run(ctx, cmd)
 }

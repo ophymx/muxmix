@@ -38,9 +38,6 @@ const (
 	VP8    Codec = "vp8"
 	ProRes Codec = "prores"
 	MJPEG  Codec = "mjpeg"
-	PNG    Codec = "png"
-	WebP   Codec = "webp"
-	GIF    Codec = "gif"
 )
 
 // Audio codecs.
@@ -71,6 +68,15 @@ const (
 	Fastest // realtime-ish; ultrafast, cpu-used 8, p1
 )
 
+var speedNames = [...]string{"default", "slowest", "slow", "medium", "fast", "fastest"}
+
+func (s Speed) String() string {
+	if int(s) < len(speedNames) {
+		return speedNames[s]
+	}
+	return fmt.Sprintf("Speed(%d)", int(s))
+}
+
 // softwareEncoders lists software encoders per codec in preference order.
 // The first entry is also the choice when no caps.Set is given, so it is
 // the one every common build has (the native aac encoder rather than
@@ -83,9 +89,6 @@ var softwareEncoders = map[Codec][]string{
 	VP8:    {"libvpx"},
 	ProRes: {"prores_ks", "prores"},
 	MJPEG:  {"mjpeg"},
-	PNG:    {"png"},
-	WebP:   {"libwebp"},
-	GIF:    {"gif"},
 	AAC:    {"aac", "libfdk_aac"},
 	Opus:   {"libopus", "opus"},
 	MP3:    {"libmp3lame", "shine"},

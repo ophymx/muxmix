@@ -146,18 +146,28 @@ func HelpFor(ctx context.Context, runner ffmpeg.Runner, kind, name string) (*Hel
 func EncoderHelp(ctx context.Context, r ffmpeg.Runner, name string) (*Help, error) {
 	return HelpFor(ctx, r, "encoder", name)
 }
+
+// DecoderHelp is HelpFor a decoder.
 func DecoderHelp(ctx context.Context, r ffmpeg.Runner, name string) (*Help, error) {
 	return HelpFor(ctx, r, "decoder", name)
 }
+
+// MuxerHelp is HelpFor a muxer.
 func MuxerHelp(ctx context.Context, r ffmpeg.Runner, name string) (*Help, error) {
 	return HelpFor(ctx, r, "muxer", name)
 }
+
+// DemuxerHelp is HelpFor a demuxer.
 func DemuxerHelp(ctx context.Context, r ffmpeg.Runner, name string) (*Help, error) {
 	return HelpFor(ctx, r, "demuxer", name)
 }
+
+// FilterHelp is HelpFor a filter.
 func FilterHelp(ctx context.Context, r ffmpeg.Runner, name string) (*Help, error) {
 	return HelpFor(ctx, r, "filter", name)
 }
+
+// BitstreamFilterHelp is HelpFor a bitstream filter.
 func BitstreamFilterHelp(ctx context.Context, r ffmpeg.Runner, name string) (*Help, error) {
 	return HelpFor(ctx, r, "bsf", name)
 }

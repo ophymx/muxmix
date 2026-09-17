@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/ophymx/muxmix/ffmpeg"
 	"github.com/ophymx/muxmix/ffmpeg/caps"
@@ -35,8 +36,13 @@ type VideoRule struct {
 	// MaxWidth and MaxHeight scale down larger sources (aspect kept).
 	// A stream that needs scaling is encoded even if it could be copied.
 	MaxWidth, MaxHeight int
-	// All keeps every video stream; the default keeps only the main one.
-	All bool
+	// Filters are applied to every encoded video stream, before any
+	// scaling, as one -filter:v chain ("crop=1920:800", "unsharp"). A
+	// stream that could be copied is still copied; set CopyCodecs to nil
+	// to force encoding.
+	Filters []string
+	// KeepAll keeps every video stream; the default keeps only the main one.
+	KeepAll bool
 	// KeepAttachedPic keeps cover art streams.
 	KeepAttachedPic bool
 }
@@ -52,8 +58,12 @@ type AudioRule struct {
 	// Languages keeps only streams whose language tag is listed (ISO 639
 	// as in the file, e.g. "eng"); untagged streams match "und". Nil keeps all.
 	Languages []string
-	// First keeps only the main audio stream (default-flagged, else first).
-	First bool
+	// Filters are applied to every encoded audio stream as one -filter:a
+	// chain, e.g. a loudnorm second pass from analyze.
+	Filters []string
+	// MainOnly keeps only the main audio stream (default-flagged, else
+	// first); the default keeps every audio stream.
+	MainOnly bool
 }
 
 // SubtitleRule decides what happens to subtitle streams.
@@ -86,8 +96,14 @@ type TranscodeOptions struct {
 	// chapters from being carried over.
 	DropMetadata bool
 	DropChapters bool
-	// FastStart moves the MP4 index to the front (default on for .mp4/.mov/.m4a).
+	// NoFastStart leaves the MP4 index at the end of the file. By default
+	// .mp4, .mov and .m4a outputs get +faststart so playback can begin
+	// before the download finishes.
 	NoFastStart bool
+	// TwoPass encodes video in two passes for a more accurate bitrate
+	// target (see ffmpeg.TwoPass). It applies only when Video.Encode has
+	// a Bitrate; quality-targeted encodes ignore it.
+	TwoPass bool
 	// Extra output options appended verbatim.
 	Extra []ffmpeg.Opt
 }
@@ -114,6 +130,33 @@ type TranscodePlan struct {
 	Streams []PlannedStream
 	Command *ffmpeg.Command
 	Info    *Info
+	// TwoPass is set when Run will use ffmpeg.TwoPass.
+	TwoPass bool
+}
+
+// Run executes the plan through t (nil for Default), adding
+// ffmpeg.TotalDuration from the probe so progress callbacks get Fraction
+// and ETA. opts are applied after the Tools' RunOptions.
+func (p *TranscodePlan) Run(ctx context.Context, t *Tools, opts ...ffmpeg.RunOption) error {
+	if t == nil {
+		t = Default
+	}
+	var all []ffmpeg.RunOption
+	if p.Info != nil && p.Info.Duration > 0 {
+		all = append(all, ffmpeg.TotalDuration(p.Info.Duration))
+	}
+	all = append(all, opts...)
+	if p.TwoPass {
+		var d time.Duration
+		if p.Info != nil {
+			d = p.Info.Duration
+		}
+		_, err := ffmpeg.TwoPass(ctx, p.Command, ffmpeg.TwoPassOptions{
+			Runner: t.runner(), Duration: d, RunOptions: append(append([]ffmpeg.RunOption(nil), t.RunOptions...), all...),
+		})
+		return err
+	}
+	return t.run(ctx, p.Command, all...)
 }
 
 // Kept returns the planned streams that make it to the output.
@@ -161,10 +204,19 @@ func (t *Tools) Transcode(ctx context.Context, input, output string, o Transcode
 	if err != nil {
 		return nil, err
 	}
-	if err := t.run(ctx, plan.Command); err != nil {
+	if err := ensureDir(output); err != nil {
+		return plan, err
+	}
+	if err := plan.Run(ctx, t); err != nil {
 		return plan, err
 	}
 	return plan, nil
+}
+
+// PlanTranscode probes the input and builds the command with the default
+// Tools, without running it.
+func PlanTranscode(ctx context.Context, input, output string, o TranscodeOptions) (*TranscodePlan, error) {
+	return Default.PlanTranscode(ctx, input, output, o)
 }
 
 // PlanTranscode probes the input and builds the command without running it.
@@ -195,6 +247,7 @@ func BuildTranscodePlan(info *Info, sys *hwaccel.System, input, output string, o
 	}
 	plan := &TranscodePlan{Input: input, Output: output, Info: info}
 	out := ffmpeg.NewOutput(output)
+	plan.TwoPass = o.TwoPass && !o.Video.Drop && o.Video.Encode.Bitrate != ""
 
 	// Video.
 	var hw hwaccel.Selection
@@ -221,7 +274,7 @@ func BuildTranscodePlan(info *Info, sys *hwaccel.System, input, output string, o
 			switch {
 			case s.IsAttachedPic() && !vrule.KeepAttachedPic:
 				ps.Action, ps.Reason = Drop, "cover art"
-			case !vrule.All && idx > 0:
+			case !vrule.KeepAll && idx > 0:
 				ps.Action, ps.Reason = Drop, "not the main video stream"
 			default:
 				w, h := s.Resolution()
@@ -243,7 +296,7 @@ func BuildTranscodePlan(info *Info, sys *hwaccel.System, input, output string, o
 						ps.Reason += "; software: " + hwReason
 					}
 					opts := vrule.Encode.OptsFor(enc)
-					var filters []string
+					filters := append([]string(nil), vrule.Filters...)
 					if needsScale {
 						filters = append(filters, scaleFilter(vrule.MaxWidth, vrule.MaxHeight))
 					}
@@ -277,7 +330,7 @@ func BuildTranscodePlan(info *Info, sys *hwaccel.System, input, output string, o
 		for _, s := range info.Probe.AudioStreams() {
 			ps := PlannedStream{Input: s.Index.Int(), Output: -1, Type: "audio", Codec: s.CodecName, Language: s.Language()}
 			switch {
-			case arule.First && s != main:
+			case arule.MainOnly && s != main:
 				ps.Action, ps.Reason = Drop, "not the main audio stream"
 			case !languageMatches(s.Language(), arule.Languages):
 				ps.Action, ps.Reason = Drop, "language not selected"
@@ -292,7 +345,11 @@ func BuildTranscodePlan(info *Info, sys *hwaccel.System, input, output string, o
 				}
 				ps.Action, ps.Encoder, ps.Output = Encode, enc, idx
 				ps.Reason = encodeReason(s.CodecName, container, false)
-				out.Options.Add(ffmpeg.Map(fmt.Sprintf("0:%d", ps.Input)), ffmpeg.PerStream("a", idx, arule.Encode.OptsFor(enc)...))
+				aopts := arule.Encode.OptsFor(enc)
+				if len(arule.Filters) > 0 {
+					aopts = append(aopts, ffmpeg.FilterString("a", strings.Join(arule.Filters, ",")))
+				}
+				out.Options.Add(ffmpeg.Map(fmt.Sprintf("0:%d", ps.Input)), ffmpeg.PerStream("a", idx, aopts...))
 				idx++
 			}
 			plan.Streams = append(plan.Streams, ps)

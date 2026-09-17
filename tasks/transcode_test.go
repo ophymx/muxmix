@@ -105,7 +105,7 @@ func TestPlanDefaultsAndDrops(t *testing.T) {
 	mkv := captureInfo(t, "multi_mkv.basic.json")
 	plan, err = BuildTranscodePlan(mkv, nil, "in.mkv", "out.webm", TranscodeOptions{
 		Video: VideoRule{CopyCodecs: AllCodecs, Encode: encode.Video{Codec: encode.VP9, Quality: 30}},
-		Audio: AudioRule{CopyCodecs: AllCodecs, First: true, Encode: encode.Audio{Codec: encode.Opus, Bitrate: "96k"}},
+		Audio: AudioRule{CopyCodecs: AllCodecs, MainOnly: true, Encode: encode.Audio{Codec: encode.Opus, Bitrate: "96k"}},
 	})
 	if err != nil {
 		t.Fatal(err)

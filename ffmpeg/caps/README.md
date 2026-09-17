@@ -54,4 +54,5 @@ It checks encoders, decoders, muxers, demuxers, every filter named in
 chosen encoder accepts), hardware device types, and encoder option values
 against their AVOption type, range and named constants. Option tables are
 fetched through the runner on demand; a `Checker` caches them, and
-`AddHelp` preloads them for use without a runner.
+`AddHelp` preloads them for use without a runner. With neither, option
+values pass unexamined and only names are checked.

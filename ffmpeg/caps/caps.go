@@ -18,6 +18,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/ophymx/muxmix/ffmpeg"
 )
@@ -152,12 +153,23 @@ func Detect(ctx context.Context, runner ffmpeg.Runner) (*Set, error) {
 		{"-bsfs", func(t string) { s.BitstreamFilters = ParseList(t) }},
 		{"-protocols", func(t string) { s.Protocols = ParseProtocols(t) }},
 	}
-	for _, st := range steps {
-		text, err := list(st.flag)
-		if err != nil {
-			return nil, err
+	// The listings are independent, so fetch them concurrently.
+	texts := make([]string, len(steps))
+	errs := make([]error, len(steps))
+	var wg sync.WaitGroup
+	for i, st := range steps {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			texts[i], errs[i] = list(st.flag)
+		}()
+	}
+	wg.Wait()
+	for i, st := range steps {
+		if errs[i] != nil {
+			return nil, errs[i]
 		}
-		st.fn(text)
+		st.fn(texts[i])
 	}
 	return s, nil
 }
@@ -216,17 +228,33 @@ func (s *Set) PixelFormat(name string) *PixelFormat {
 	return nil
 }
 
-// HasEncoder, HasDecoder, HasMuxer, HasDemuxer, HasFilter, HasHWAccel,
-// HasBitstreamFilter and HasProtocol answer yes/no questions.
+// HasEncoder reports whether the build has the named encoder.
 func (s *Set) HasEncoder(name string) bool { return s.Encoder(name) != nil }
+
+// HasDecoder reports whether the build has the named decoder.
 func (s *Set) HasDecoder(name string) bool { return s.Decoder(name) != nil }
-func (s *Set) HasMuxer(name string) bool   { return s.Muxer(name) != nil }
+
+// HasMuxer reports whether the build has the named muxer.
+func (s *Set) HasMuxer(name string) bool { return s.Muxer(name) != nil }
+
+// HasDemuxer reports whether the build has the named demuxer.
 func (s *Set) HasDemuxer(name string) bool { return s.Demuxer(name) != nil }
-func (s *Set) HasFilter(name string) bool  { return s.Filter(name) != nil }
+
+// HasFilter reports whether the build has the named filter.
+func (s *Set) HasFilter(name string) bool { return s.Filter(name) != nil }
+
+// HasHWAccel reports whether the build was compiled with the named
+// hardware acceleration method (as ffmpeg -hwaccels lists it).
 func (s *Set) HasHWAccel(name string) bool { return contains(s.HWAccels, name) }
+
+// HasBitstreamFilter reports whether the build has the named bitstream
+// filter.
 func (s *Set) HasBitstreamFilter(name string) bool {
 	return contains(s.BitstreamFilters, name)
 }
+
+// HasProtocol reports whether the build can read (output false) or write
+// (output true) the named protocol.
 func (s *Set) HasProtocol(name string, output bool) bool {
 	if output {
 		return contains(s.Protocols.Output, name)

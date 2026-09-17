@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -112,13 +113,39 @@ func resolveHW(sys *hwaccel.System, policy hwaccel.Policy, v *encode.Video) (hwa
 	return sel, reason, nil
 }
 
-func (t *Tools) run(ctx context.Context, cmd *ffmpeg.Command) error {
-	var opts []ffmpeg.RunOption
+// Run executes a command through the Tools' runner with its RunOptions
+// followed by opts, so a job can add its own progress callback. Plans
+// returned by PlanTranscode and PlanPackage have a Run method that also
+// supplies ffmpeg.TotalDuration.
+func (t *Tools) Run(ctx context.Context, cmd *ffmpeg.Command, opts ...ffmpeg.RunOption) (*ffmpeg.Result, error) {
+	var all []ffmpeg.RunOption
 	if t != nil {
-		opts = t.RunOptions
+		all = append(all, t.RunOptions...)
 	}
-	_, err := t.runner().Run(ctx, cmd, opts...)
+	all = append(all, opts...)
+	return t.runner().Run(ctx, cmd, all...)
+}
+
+func (t *Tools) run(ctx context.Context, cmd *ffmpeg.Command, opts ...ffmpeg.RunOption) error {
+	_, err := t.Run(ctx, cmd, opts...)
 	return err
+}
+
+// ensureDir creates the directory an output file will be written to.
+func ensureDir(output string) error {
+	dir := filepath.Dir(output)
+	if dir == "" || dir == "." {
+		return nil
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("tasks: create output directory: %w", err)
+	}
+	return nil
+}
+
+// Inspect probes input with the default Tools.
+func Inspect(ctx context.Context, input string, inputOpts ...ffprobe.Option) (*Info, error) {
+	return Default.Inspect(ctx, input, inputOpts...)
 }
 
 // Info is what the tasks learn about an input before working on it.
