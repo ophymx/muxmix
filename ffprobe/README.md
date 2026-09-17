@@ -37,7 +37,14 @@ a value whose `Valid()` is false. There are no required fields, so
 
 Sections whose keys vary with content (side data, IAMF stream group
 components) keep their named fields and collect everything else in an
-`Extra map[string]any`.
+`Extra map[string]any`. The common side data types have typed accessors:
+`stream.DisplayMatrix()`, `stream.MasteringDisplay()`,
+`stream.ContentLightLevel()`, `stream.DolbyVision()`, `stream.Stereo3D()`,
+`stream.Spherical()`, `packet.SkipSamples()`, and `stream.IsHDR()`.
+Anything else decodes with `SideDataAs[T]` or `DecodeSideData`.
+
+`Prober.Sections` returns the section tree from `ffprobe -sections` for
+runtime feature detection, for example `root.Has("stream_groups")`.
 
 Fields that were renamed between releases keep both names; helpers such as
 `Frame.Time()` and `Frame.DurationOf()` read whichever one is present.

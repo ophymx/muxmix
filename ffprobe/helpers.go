@@ -180,14 +180,11 @@ func (s *Stream) SideData(sideDataType string) *SideData {
 }
 
 // Rotation returns the display rotation in degrees from Display Matrix side
-// data, or 0. ffmpeg reports counter-clockwise rotation as negative.
+// data, or 0. ffmpeg reports counter-clockwise rotation as negative; see
+// DisplayMatrix.Degrees for a normalised clockwise value.
 func (s *Stream) Rotation() int {
-	sd := s.SideData("Display Matrix")
-	if sd == nil {
-		return 0
-	}
-	if v, ok := sd.Extra["rotation"]; ok {
-		return int(numberOf(v))
+	if dm := s.DisplayMatrix(); dm != nil {
+		return int(dm.Rotation.Float64())
 	}
 	return 0
 }
