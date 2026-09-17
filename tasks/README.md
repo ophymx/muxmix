@@ -20,7 +20,40 @@ err = tasks.Preview(ctx, "movie.mkv", "preview.webp", tasks.PreviewOptions{})
 err = tasks.Waveform(ctx, "podcast.mp3", "wave.png", tasks.WaveformOptions{Width: 1200, Height: 160, Color: "#3b82f6"})
 ```
 
-What each one handles for you:
+## Transcode
+
+`Transcode` turns a description of the result into the right `-map`,
+codec and filter options for every stream, and tells you what it decided:
+
+```go
+plan, err := tasks.Transcode(ctx, "in.mkv", "out.mp4", tasks.TranscodeOptions{
+    Video: tasks.VideoRule{
+        CopyCodecs: tasks.AllCodecs,                                  // keep H.264/HEVC as-is
+        Encode:     encode.Video{Codec: encode.H264, Quality: 22},    // otherwise
+        MaxHeight:  1080,                                             // scale down 4K
+    },
+    Audio: tasks.AudioRule{CopyCodecs: tasks.AllCodecs, Languages: []string{"eng", "jpn"}},
+    Caps:  set, // choose encoders from this build and validate before running
+})
+fmt.Print(plan)
+// 0 video h264: copy (codec accepted by container)
+// 1 audio aac [eng]: copy (codec accepted by container)
+// 2 audio opus [deu]: drop (language not selected)
+// 3 subtitle subrip [eng]: encode → mov_text (converted for container)
+// 4 attachment : drop (attachments are not carried)
+```
+
+It knows which codecs each container accepts for copying (MP4 will not
+take Opus or FLAC without player trouble, WebM takes only VP8/VP9/AV1 and
+Opus/Vorbis), converts text subtitles to the container's format and drops
+bitmap ones it cannot hold, skips cover art unless asked, keeps only the
+main video and optionally the main audio, filters by language, carries
+global metadata and chapters unless told not to, and adds `+faststart` for
+MP4. `PlanTranscode` returns the plan and `Command` without running, so
+you can inspect or adjust it first; `BuildTranscodePlan` works from an
+existing probe result.
+
+What each of the others handles for you:
 
 - **Thumbnail** seeks before decoding (fast), defaults to 10% in to skip
   leaders, can let ffmpeg's `thumbnail` filter pick a representative frame,

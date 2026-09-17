@@ -69,6 +69,9 @@ const (
 )
 
 // softwareEncoders lists software encoders per codec in preference order.
+// The first entry is also the choice when no caps.Set is given, so it is
+// the one every common build has (the native aac encoder rather than
+// libfdk_aac, for example).
 var softwareEncoders = map[Codec][]string{
 	H264:   {"libx264", "libopenh264"},
 	HEVC:   {"libx265", "libkvazaar"},
@@ -80,7 +83,7 @@ var softwareEncoders = map[Codec][]string{
 	PNG:    {"png"},
 	WebP:   {"libwebp"},
 	GIF:    {"gif"},
-	AAC:    {"libfdk_aac", "aac"},
+	AAC:    {"aac", "libfdk_aac"},
 	Opus:   {"libopus", "opus"},
 	MP3:    {"libmp3lame", "shine"},
 	FLAC:   {"flac"},

@@ -510,3 +510,27 @@ func shellQuote(s string) string {
 	}
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
+
+// PerStream rebinds options to one output stream, so the same encoder
+// settings can be applied to different streams: PerStream("a", 1,
+// AudioCodec("aac"), BitRate("a", "128k")) renders -c:a:1 aac -b:a:1 128k.
+// Options that already carry a stream type ("c:a") get the index appended;
+// bare codec options ("crf", "pix_fmt", "ac") get ":<type>:<index>".
+func PerStream(streamType string, index int, opts ...Opt) Opt {
+	return func(o *Options) {
+		var tmp Options
+		tmp.Add(opts...)
+		suffix := fmt.Sprintf(":%d", index)
+		for _, a := range tmp {
+			switch {
+			case a.Name == "":
+				// positional value from Raw; leave it
+			case strings.Contains(a.Name, ":"):
+				a.Name += suffix
+			default:
+				a.Name += ":" + streamType + suffix
+			}
+			*o = append(*o, a)
+		}
+	}
+}

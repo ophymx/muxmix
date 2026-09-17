@@ -103,7 +103,7 @@ func TestChooseEncoder(t *testing.T) {
 	if enc, err := encode.ChooseEncoder(set, encode.H264, hwaccel.None); err != nil || enc != "libx264" {
 		t.Errorf("h264 = %s %v", enc, err)
 	}
-	if enc, err := encode.ChooseEncoder(set, encode.AAC, hwaccel.None); err != nil || enc != "aac" { // no libfdk in Debian's build
+	if enc, err := encode.ChooseEncoder(set, encode.AAC, hwaccel.None); err != nil || enc != "aac" {
 		t.Errorf("aac = %s %v", enc, err)
 	}
 	if enc, err := encode.ChooseEncoder(set, encode.H264, hwaccel.CUDA); err != nil || enc != "h264_nvenc" {

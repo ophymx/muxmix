@@ -17,7 +17,8 @@ raw argument lists.
 `ffmpeg/encode` provides encoder-neutral `Video`, `Audio` and `Image` settings with one
 quality scale and one speed scale mapped onto each encoder's own options, encoder selection
 from `caps` and `hwaccel`, and `tasks` builds on it for thumbnails, trickplay, previews and
-waveforms. Still open: two-pass orchestration and probe-driven stream mapping.
+waveforms; `tasks.Transcode` does probe-driven stream mapping. Still open: two-pass
+orchestration and HLS/DASH packaging.
 
 ## 4. hwaccel: marshal/unmarshal SystemSupport for caching (done)
 
