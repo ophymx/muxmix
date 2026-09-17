@@ -48,7 +48,7 @@ func TestBuildPackagePlanHLS(t *testing.T) {
 		"-force_key_frames expr:gte(t,n_forced*2)",
 		"-f hls -hls_time 2 -hls_playlist_type vod -hls_list_size 0 -hls_flags independent_segments -hls_segment_type fmp4 -master_pl_name master.m3u8",
 		"-var_stream_map a:0,agroup:audio,name:audio-eng,language:eng,default:yes v:0,agroup:audio,name:hi v:1,agroup:audio,name:lo",
-		"-hls_segment_filename out/%v/seg_%05d.m4s out/%v/index.m3u8",
+		"-hls_segment_filename " + filepath.Join("out", "%v", "seg_%05d.m4s") + " " + filepath.Join("out", "%v", "index.m3u8"),
 	} {
 		if !strings.Contains(a, want) {
 			t.Errorf("args missing %q:\n%s", want, a)
@@ -87,7 +87,7 @@ func TestBuildPackagePlanDASH(t *testing.T) {
 	}
 	a := strings.Join(res.Command.Args(), " ")
 	for _, want := range []string{
-		"-f dash -seg_duration 6 -use_template 1 -use_timeline 1 -init_seg_name init-$RepresentationID$.m4s -media_seg_name chunk-$RepresentationID$-$Number%05d$.m4s -adaptation_sets id=0,streams=v id=1,streams=a -hls_playlist 1 -hls_master_name master.m3u8 out/manifest.mpd",
+		"-f dash -seg_duration 6 -use_template 1 -use_timeline 1 -init_seg_name init-$RepresentationID$.m4s -media_seg_name chunk-$RepresentationID$-$Number%05d$.m4s -adaptation_sets id=0,streams=v id=1,streams=a -hls_playlist 1 -hls_master_name master.m3u8 " + filepath.Join("out", "manifest.mpd"),
 	} {
 		if !strings.Contains(a, want) {
 			t.Errorf("args missing %q:\n%s", want, a)
