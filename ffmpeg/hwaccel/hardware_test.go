@@ -179,9 +179,17 @@ func TestHardwareDetectCached(t *testing.T) {
 		}
 	}
 
-	moved := hwaccel.ProbeOptions{Devices: map[hwaccel.Kind][]string{hwaccel.VAAPI: {"/dev/dri/does-not-exist"}}}
+	// Only a backend the build has is checked for moved devices, so add a
+	// device to one this machine uses, not to VAAPI on a macOS build.
+	kinds := cold.AvailableKinds()
+	if len(kinds) == 0 {
+		t.Skip("no hardware acceleration on this machine")
+	}
+	kind := kinds[0]
+	devices := append(hwaccel.DefaultDevices(kind), "does-not-exist")
+	moved := hwaccel.ProbeOptions{Devices: map[hwaccel.Kind][]string{kind: devices}}
 	if _, fromCache, err = hwaccel.DetectCached(ctx, nil, path, time.Hour, moved); err != nil || fromCache {
-		t.Errorf("a changed device set must re-detect: fromCache=%v err=%v", fromCache, err)
+		t.Errorf("a changed %s device set must re-detect: fromCache=%v err=%v", kind, fromCache, err)
 	}
 }
 

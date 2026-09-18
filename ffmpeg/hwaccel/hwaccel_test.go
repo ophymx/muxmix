@@ -245,6 +245,29 @@ func TestProbeEncoderArgs(t *testing.T) {
 	}
 }
 
+// An encoder that takes software frames accepts a p010 upload without
+// complaint and encodes it 8-bit, so a p010 probe that ran is only
+// believed when the encoder lists a 10-bit format.
+func TestProbeEncoderIgnoresConvertedDepth(t *testing.T) {
+	fake := fakeFFmpeg(t, "", "", `
+  "-h encoder=h264_videotoolbox") printf 'Encoder h264_videotoolbox [VT H.264]:\n    Supported pixel formats: videotoolbox_vld nv12 yuv420p\n'; exit 0 ;;
+  "-h encoder=hevc_videotoolbox") printf 'Encoder hevc_videotoolbox [VT HEVC]:\n    Supported pixel formats: videotoolbox_vld nv12 yuv420p p010le\n'; exit 0 ;;
+  *"-c:v h264_videotoolbox"*|*"-c:v hevc_videotoolbox"*|*"-c:v prores_videotoolbox"*) exit 0 ;;
+`)
+	runner := baseffmpeg.New(baseffmpeg.WithBinary(fake))
+	for codec, want := range map[string][]string{
+		"h264": {NV12},
+		"hevc": {NV12, P010},
+		// No help to go on: the encode result stands.
+		"prores": {NV12, P010},
+	} {
+		probe := ProbeEncoder(context.Background(), runner, VideoToolbox, "", codec)
+		if !probe.Works || !slices.Equal(probe.Formats, want) {
+			t.Errorf("%s: works=%v formats=%v, want %v (%s)", codec, probe.Works, probe.Formats, want, probe.Error)
+		}
+	}
+}
+
 func TestProbeReportsRunnerFailure(t *testing.T) {
 	fake := fakeFFmpeg(t, "", "", `
   *) echo "forced failure: $*" >&2; exit 2 ;;

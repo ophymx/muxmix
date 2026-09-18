@@ -162,6 +162,7 @@ func ProbeEncoder(ctx context.Context, runner baseffmpeg.Runner, kind Kind, devi
 		return probe
 	}
 	probe.Encoder = encoder
+	var help *caps.Help
 	for _, format := range probeFormats {
 		args, err := encoderProbeArgs(kind, device, encoder, format)
 		if err != nil {
@@ -176,10 +177,38 @@ func ProbeEncoder(ctx context.Context, runner baseffmpeg.Runner, kind Kind, devi
 			}
 			continue
 		}
+		if format != NV12 {
+			if help == nil {
+				help, _ = caps.EncoderHelp(ctx, runner, encoder)
+			}
+			if convertsFormat(help, format) {
+				continue
+			}
+		}
 		probe.Works = true
 		probe.Formats = append(probe.Formats, format)
 	}
 	return probe
+}
+
+// convertsFormat reports whether ffmpeg would have to convert format
+// before the encoder sees it, so a probe that succeeded in that format
+// proves nothing about depth. ffmpeg negotiates an encoder that takes
+// software frames down to one of its listed pixel formats without an
+// error: h264_videotoolbox lists nv12 and yuv420p, and a p010 frame fed
+// to it comes out 8-bit. An encoder that takes only hardware frames lists
+// no nv12 and is left alone; its upload fails outright when the device
+// cannot keep the depth. A nil help (the query failed) is not evidence
+// either way.
+func convertsFormat(help *caps.Help, format string) bool {
+	if help == nil || !help.SupportsPixelFormat(NV12) {
+		return false
+	}
+	switch format {
+	case P010:
+		return !help.SupportsPixelFormat("p010le") && !help.SupportsPixelFormat("p010be")
+	}
+	return !help.SupportsPixelFormat(format)
 }
 
 func formatProbeError(err error, result *baseffmpeg.Result) string {
