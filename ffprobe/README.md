@@ -223,7 +223,10 @@ arguments, and unwraps to the `os/exec` error.
 
 ## How the types are generated
 
-`go generate ./ffprobe` runs `internal/gen`, which reads three inputs:
+`go generate ./ffprobe` runs `internal/gen`. The generator is a module of
+its own, so its schema library is not a dependency of muxmix, which has
+none; the directive enters that module and points it back here with
+`-dir`. It reads three inputs:
 
 - `xsd/ffprobe-<tag>.xsd` for every tag in `ffprobe.versions`: the field
   vocabulary and which release introduced or removed each field.

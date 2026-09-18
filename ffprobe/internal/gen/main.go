@@ -19,7 +19,14 @@
 // side data as free-form objects), which is why every scalar is emitted as
 // one of the lenient value types in values.go.
 //
-// Run from the ffprobe package directory: go generate ./ffprobe
+// The generator is its own module, so the muxmix module itself needs no
+// dependencies. Run it through the directive, which enters that module
+// and points it back at the ffprobe package:
+//
+//	go generate ./ffprobe
+//
+// or by hand from anywhere, with -dir naming the ffprobe package
+// directory that holds ffprobe.versions, xsd/ and testdata/probe.
 package main
 
 import (
@@ -27,6 +34,7 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"errors"
+	"flag"
 	"fmt"
 	"go/format"
 	"io"
@@ -51,6 +59,12 @@ const (
 )
 
 func main() {
+	dir := flag.String("dir", ".", "the ffprobe package directory to read inputs from and write outputs to")
+	flag.Parse()
+	if err := os.Chdir(*dir); err != nil {
+		fmt.Fprintln(os.Stderr, "gen:", err)
+		os.Exit(1)
+	}
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, "gen:", err)
 		os.Exit(1)

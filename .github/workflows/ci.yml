@@ -18,6 +18,9 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+          # muxmix itself has no dependencies; the generator module is the
+          # only thing with a go.sum for setup-go to key its cache on.
+          cache-dependency-path: ffprobe/internal/gen/go.sum
       - name: Install ffmpeg (Linux)
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
@@ -38,10 +41,18 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+          # muxmix itself has no dependencies; the generator module is the
+          # only thing with a go.sum for setup-go to key its cache on.
+          cache-dependency-path: ffprobe/internal/gen/go.sum
       - name: gofmt
         run: |
           out=$(gofmt -l .)
           if [ -n "$out" ]; then echo "unformatted:"; echo "$out"; exit 1; fi
+      - name: muxmix has no dependencies
+        run: |
+          if grep -q '^require' go.mod; then echo "go.mod gained a dependency:"; cat go.mod; exit 1; fi
+      - name: vet the generator module
+        run: go -C ffprobe/internal/gen vet ./...
       - name: generated ffprobe types are current
         run: |
           go generate ./ffprobe
