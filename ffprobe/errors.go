@@ -111,14 +111,16 @@ var avErrorSentinels = map[AVError]error{
 // FFmpeg tag. FFmpeg's own tags all lie far below any errno.
 func (e AVError) IsErrno() bool { return e < 0 && e > -4096 }
 
-// Errno returns the POSIX errno the code wraps, or 0 for FFmpeg's own
-// codes. The number is the POSIX value on every platform, because
-// ffprobe reports it from the C library it was built against.
+// Errno returns the errno the code wraps, or 0 for FFmpeg's own codes and
+// for system errors whose number has no portable meaning on this platform.
+// ffprobe reports the number its own C library uses, and that numbering is
+// per-platform, so compare against syscall constants rather than literals:
+// a timeout is 110 on Linux, 60 on the BSDs and 138 on Windows.
 func (e AVError) Errno() syscall.Errno {
 	if !e.IsErrno() {
 		return 0
 	}
-	return syscall.Errno(-e)
+	return errnoOf(int32(-e))
 }
 
 // String returns the FFmpeg constant name ("AVERROR_INVALIDDATA"), the
@@ -128,7 +130,10 @@ func (e AVError) String() string {
 		return n
 	}
 	if e.IsErrno() {
-		return fmt.Sprintf("errno %d (%s)", -e, e.Errno().Error())
+		if errno := e.Errno(); errno != 0 {
+			return fmt.Sprintf("errno %d (%s)", -e, errno.Error())
+		}
+		return fmt.Sprintf("errno %d", -e)
 	}
 	return strconv.Itoa(int(e))
 }
@@ -161,7 +166,8 @@ func (e AVError) Is(target error) bool {
 			return true
 		}
 	}
-	return errors.Is(e.Errno(), target)
+	errno := e.Errno()
+	return errno != 0 && errors.Is(errno, target)
 }
 
 // MarshalJSON emits the code as a JSON number, ffprobe style.

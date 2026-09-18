@@ -37,8 +37,10 @@ func TestAVErrorConstants(t *testing.T) {
 	if AVErrorInvalidData != -1094995529 || AVErrorEOF != -541478725 {
 		t.Errorf("INVALIDDATA=%d EOF=%d", AVErrorInvalidData, AVErrorEOF)
 	}
-	if e := AVError(-110); !e.IsErrno() || e.Errno() != syscall.ETIMEDOUT {
-		t.Errorf("-110: errno=%v isErrno=%v", e.Errno(), e.IsErrno())
+	// The errno numbering is per-platform, so derive the code rather than
+	// hard-coding Linux's.
+	if e := AVError(-errnoNumber(syscall.ETIMEDOUT)); !e.IsErrno() || e.Errno() != syscall.ETIMEDOUT {
+		t.Errorf("timeout: code=%d errno=%v isErrno=%v", e, e.Errno(), e.IsErrno())
 	}
 }
 
@@ -54,9 +56,9 @@ func TestProbeErrorIs(t *testing.T) {
 		{-2, fs.ErrPermission, false},
 		{-13, fs.ErrPermission, true},
 		{-1, fs.ErrPermission, true},
-		{-110, syscall.ETIMEDOUT, true},
-		{-110, fs.ErrNotExist, false},
-		{-22, syscall.EINVAL, true},
+		{AVError(-errnoNumber(syscall.ETIMEDOUT)), syscall.ETIMEDOUT, true},
+		{AVError(-errnoNumber(syscall.ETIMEDOUT)), fs.ErrNotExist, false},
+		{AVError(-errnoNumber(syscall.EINVAL)), syscall.EINVAL, true},
 		{AVErrorInvalidData, ErrInvalidData, true},
 		{AVErrorInvalidData, AVErrorInvalidData, true},
 		{AVErrorInvalidData, ErrEOF, false},
