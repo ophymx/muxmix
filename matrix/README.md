@@ -3,16 +3,22 @@
 Docker images for the distributions that ship each FFmpeg release line,
 and the scripts that capture fixtures from them.
 
-| Image           | Base                | FFmpeg |
-|-----------------|---------------------|--------|
-| `ubuntu-22.04`  | ubuntu:22.04        | 4.4    |
-| `debian-12`     | debian:bookworm     | 5.1    |
-| `ubuntu-24.04`  | ubuntu:24.04        | 6.1    |
-| `alpine-3.20`   | alpine:3.20         | 6.1    |
-| `debian-13`     | debian:trixie       | 7.1    |
-| `alpine-3.22`   | alpine:3.22         | 7.1    |
-| `debian-sid`    | debian:sid          | 8.1    |
-| `alpine-edge`   | alpine:edge         | 8.1    |
+| Image          | Base            | FFmpeg  |
+|----------------|-----------------|---------|
+| `ubuntu-22.04` | ubuntu:22.04    | 4.4.2   |
+| `debian-12`    | debian:bookworm | 5.1.9   |
+| `alpine-3.20`  | alpine:3.20     | 6.1.1   |
+| `ubuntu-24.04` | ubuntu:24.04    | 6.1.1   |
+| `alpine-3.22`  | alpine:3.22     | 6.1.2   |
+| `debian-13`    | debian:trixie   | 7.1.5   |
+| `alpine-edge`  | alpine:edge     | 8.1.2   |
+| `debian-sid`   | debian:sid      | 8.1.2   |
+
+Eight images, six distinct releases: 6.1.1 and 8.1.2 each ship in two of
+them, which is worth keeping because the distributions patch them
+differently. The versions move as the distributions update; the fixture
+directories under `ffprobe/testdata/probe/` are named for whatever was
+captured.
 
 ## Why
 
