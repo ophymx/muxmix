@@ -181,3 +181,65 @@ func TestMergeVideo(t *testing.T) {
 		t.Errorf("own codec = %+v", v)
 	}
 }
+
+// tenBitSystem is a machine whose VAAPI device encodes HEVC at 10 bits
+// but H.264 only at 8, as a Tiger Lake iGPU does.
+func tenBitSystem() *hwaccel.System {
+	sys := vaapiSystem()
+	sys.Caps.Encoders = append(sys.Caps.Encoders, caps.Codec{Name: "hevc_vaapi", Type: caps.Video})
+	sys.Probes[hwaccel.VAAPI] = []hwaccel.ProbeResult{{
+		Kind: hwaccel.VAAPI, Device: "/dev/dri/renderD128", Available: true,
+		Encoders: []hwaccel.EncoderProbe{
+			{Codec: "h264", Encoder: "h264_vaapi", Works: true, Formats: []string{hwaccel.NV12}},
+			{Codec: "hevc", Encoder: "hevc_vaapi", Works: true, Formats: []string{hwaccel.NV12, hwaccel.P010}},
+		},
+	}}
+	return sys
+}
+
+// TestTranscodePlanKeepsSourceDepth checks that a 10-bit source is
+// uploaded as p010 when the device encodes it, and flattened to nv12 when
+// it does not -- the upload format is the only thing standing between a
+// Main 10 source and an 8-bit output.
+func TestTranscodePlanKeepsSourceDepth(t *testing.T) {
+	info := captureInfo(t, "hdr_mp4.basic.json")
+	sys := tenBitSystem()
+
+	plan, err := BuildTranscodePlan(info, sys, "hdr.mp4", "out.mp4", TranscodeOptions{
+		HW:    hwaccel.PreferHardware(),
+		Video: VideoRule{Encode: encode.Video{Codec: encode.HEVC}, MaxHeight: 16},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := args(plan); !strings.Contains(got, "-filter:v:0 scale=w=-2:h=16,format=p010,hwupload") {
+		t.Errorf("10-bit source should upload as p010:\n%s", got)
+	}
+	if sel := plan.Streams[0].HW; sel.Format != hwaccel.P010 {
+		t.Errorf("planned selection format = %q", sel.Format)
+	}
+
+	// The same source to H.264, which this device only encodes 8-bit.
+	plan, err = BuildTranscodePlan(info, sys, "hdr.mp4", "out.mp4", TranscodeOptions{
+		HW:    hwaccel.PreferHardware(),
+		Video: VideoRule{Encode: encode.Video{Codec: encode.H264}, MaxHeight: 16},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := args(plan); !strings.Contains(got, "format=nv12,hwupload") {
+		t.Errorf("a device that only encodes 8-bit h264 must upload nv12:\n%s", got)
+	}
+
+	// An 8-bit source is unaffected.
+	plan, err = BuildTranscodePlan(captureInfo(t, "multi_mkv.basic.json"), sys, "multi.mkv", "out.mp4", TranscodeOptions{
+		HW:    hwaccel.PreferHardware(),
+		Video: VideoRule{Encode: encode.Video{Codec: encode.HEVC}, MaxHeight: 16},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := args(plan); !strings.Contains(got, "format=nv12,hwupload") {
+		t.Errorf("an 8-bit source must still upload nv12:\n%s", got)
+	}
+}

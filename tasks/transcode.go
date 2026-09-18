@@ -296,7 +296,11 @@ func BuildTranscodePlan(info *Info, sys *hwaccel.System, input, output string, o
 					if err != nil {
 						return nil, err
 					}
-					ps.Action, ps.Encoder, ps.HW = Encode, enc, hw
+					// A 10-bit source keeps its depth when the device
+					// proved it encodes p010; otherwise the upload
+					// flattens it to 8-bit as before.
+					sel := sys.PreserveDepth(hw, s.PixFmt)
+					ps.Action, ps.Encoder, ps.HW = Encode, enc, sel
 					ps.Reason = encodeReason(s.CodecName, container, needsScale)
 					if hwReason != "" {
 						ps.Reason += "; software: " + hwReason
@@ -306,7 +310,7 @@ func BuildTranscodePlan(info *Info, sys *hwaccel.System, input, output string, o
 					if needsScale {
 						filters = append(filters, scaleFilter(vrule.MaxWidth, vrule.MaxHeight))
 					}
-					if chain := hw.Filter(filters...); chain != "" {
+					if chain := sel.Filter(filters...); chain != "" {
 						opts = append(opts, ffmpeg.FilterString("v", chain))
 					}
 					out.Options.Add(ffmpeg.Map(fmt.Sprintf("0:%d", ps.Input)), ffmpeg.PerStream("v", idx, opts...))

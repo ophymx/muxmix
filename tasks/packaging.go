@@ -247,6 +247,11 @@ func BuildPackagePlan(info *Info, sys *hwaccel.System, input, outDir string, o P
 	if base.PixFmt == "" && !hw.Hardware() {
 		base.PixFmt = "yuv420p"
 	}
+	// Every rung comes from the one source stream, so its depth decides
+	// the upload format for the whole ladder.
+	if v := info.Probe.VideoStream(); v != nil {
+		hw = sys.PreserveDepth(hw, v.PixFmt)
+	}
 	audio := o.Audio
 	if audio.Codec == "" && audio.Encoder == "" {
 		audio.Codec = encode.AAC
