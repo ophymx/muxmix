@@ -104,8 +104,9 @@ type TranscodeOptions struct {
 	// target (see ffmpeg.TwoPass). It applies only when Video.Encode has
 	// a Bitrate; quality-targeted encodes ignore it.
 	TwoPass bool
-	// Extra output options appended verbatim.
-	Extra []ffmpeg.Opt
+	// Extra output options appended verbatim. Build one with ffmpeg.Opts;
+	// it is data so TranscodeOptions can be serialized.
+	Extra ffmpeg.Options
 	// Info is an already probed description of the input, from Inspect;
 	// nil probes it. Reuse it when the same file gets several tasks.
 	Info *Info
@@ -418,7 +419,7 @@ func BuildTranscodePlan(info *Info, sys *hwaccel.System, input, output string, o
 	if container.faststart && !o.NoFastStart {
 		out.Options.Add(ffmpeg.MovFlags("+faststart"))
 	}
-	out.Options.Add(o.Extra...)
+	out.Options = append(out.Options, o.Extra...)
 
 	plan.Command = &ffmpeg.Command{
 		Inputs:  []*ffmpeg.Input{ffmpeg.NewInput(input)},

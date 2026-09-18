@@ -24,7 +24,9 @@ type Audio struct {
 
 	Channels   int // -ac
 	SampleRate int // -ar
-	Extra      []ffmpeg.Opt
+	// Extra options are appended last. Build one with ffmpeg.Opts; it is
+	// data so Audio can be serialized.
+	Extra ffmpeg.Options
 }
 
 // ResolveEncoder returns the encoder these settings will use.
@@ -64,7 +66,7 @@ func (a Audio) MustOpts(set *caps.Set) []ffmpeg.Opt {
 func (a Audio) OptsFor(encoder string) []ffmpeg.Opt {
 	out := opts(ffmpeg.AudioCodec(encoder))
 	if encoder == "copy" {
-		return append(out, a.Extra...)
+		return append(out, a.Extra.Opt())
 	}
 	switch {
 	case a.Bitrate != "":
@@ -91,7 +93,7 @@ func (a Audio) OptsFor(encoder string) []ffmpeg.Opt {
 	if a.SampleRate > 0 {
 		out = append(out, ffmpeg.SampleRate(a.SampleRate))
 	}
-	return append(out, a.Extra...)
+	return append(out, a.Extra.Opt())
 }
 
 func clamp(n, lo, hi int) int {

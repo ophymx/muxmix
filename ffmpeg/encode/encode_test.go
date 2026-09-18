@@ -49,7 +49,7 @@ func TestVideoOptsFor(t *testing.T) {
 	if got := render(encode.Video{Codec: encode.Copy}.OptsFor("copy")); got != "-c:v copy" {
 		t.Errorf("copy = %s", got)
 	}
-	extra := encode.Video{Quality: 20, Extra: []ffmpeg.Opt{ffmpeg.X264Params("aq-mode=3")}}
+	extra := encode.Video{Quality: 20, Extra: ffmpeg.Opts(ffmpeg.X264Params("aq-mode=3"))}
 	if got := render(extra.OptsFor("libx264")); !strings.HasSuffix(got, "-x264-params aq-mode=3") {
 		t.Errorf("extra = %s", got)
 	}

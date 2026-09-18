@@ -26,7 +26,9 @@ type Image struct {
 	Quality int
 	// Lossless applies to WebP.
 	Lossless bool
-	Extra    []ffmpeg.Opt
+	// Extra options are appended last. Build one with ffmpeg.Opts; it is
+	// data so Image can be serialized.
+	Extra ffmpeg.Options
 }
 
 // ImageFormatFor guesses the format from a file name's extension.
@@ -73,5 +75,5 @@ func (im Image) Opts() []ffmpeg.Opt {
 	case AnimatedGIF:
 		out = append(out, ffmpeg.VideoCodec("gif"))
 	}
-	return append(out, im.Extra...)
+	return append(out, im.Extra.Opt())
 }

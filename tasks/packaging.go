@@ -96,8 +96,10 @@ type PackageOptions struct {
 	ManifestName string
 	// HW is the hardware encoding policy, as for TranscodeOptions. One
 	// backend serves every rung.
-	HW    hwaccel.Policy
-	Extra []ffmpeg.Opt
+	HW hwaccel.Policy
+	// Extra output options appended verbatim. Build one with ffmpeg.Opts;
+	// it is data so PackageOptions can be serialized.
+	Extra ffmpeg.Options
 	// Info is an already probed description of the input, from Inspect;
 	// nil probes it. Reuse it when the same file gets several tasks.
 	Info *Info
@@ -424,7 +426,7 @@ func BuildPackagePlan(info *Info, sys *hwaccel.System, input, outDir string, o P
 	default:
 		return nil, fmt.Errorf("tasks: unknown package format %q", o.Format)
 	}
-	out.Options.Add(o.Extra...)
+	out.Options = append(out.Options, o.Extra...)
 
 	res.Command = &ffmpeg.Command{
 		Inputs:  []*ffmpeg.Input{ffmpeg.NewInput(input)},

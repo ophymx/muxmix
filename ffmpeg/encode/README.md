@@ -21,7 +21,7 @@ encoder instead; `Encoder: "libx265"` names one outright.
 
 `Video.Quality` is the x264 CRF scale: lower is better, 18 is visually near-lossless,
 23 is x264's default, 51 is worst. Zero means unset (each encoder's own default), so
-true lossless needs `ffmpeg.CRF(0)` in `Extra`.
+true lossless needs `Extra: ffmpeg.Opts(ffmpeg.CRF(0))`.
 Each encoder gets its own knob and range:
 
 | Encoder            | Quality maps to                  | Speed maps to                    |
@@ -38,7 +38,9 @@ Each encoder gets its own knob and range:
 Setting `Bitrate` switches to bit-rate targeting (`-b:v`, with `-maxrate`
 and `-bufsize` when `MaxRate` is given), including the `-rc vbr` /
 `-rc_mode VBR` that NVENC and VAAPI need. `Extra` options come last and
-override anything derived.
+override anything derived; it is an `ffmpeg.Options` (build one with
+`ffmpeg.Opts`) rather than a list of constructors, so these settings stay
+plain data and can be serialized.
 
 `Audio` takes a `Bitrate` or a `VBR` level from 1 to 10 (higher is better),
 mapped onto `-q:a` for MP3 and AAC, `-vbr` for FDK-AAC and a bit rate for

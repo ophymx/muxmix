@@ -19,22 +19,28 @@ import (
 //			ffmpeg.VideoCodec("libx264"), ffmpeg.CRF(20), ffmpeg.Preset("slow"),
 //			ffmpeg.AudioCodec("aac"), ffmpeg.BitRate("a", "160k"),
 //			ffmpeg.MovFlags("+faststart"))
+//
+// A Command is plain data: no functions, no handles, nothing that only
+// makes sense in the process that built it. It round-trips through
+// encoding/json with the same Args on the far side, so one process can
+// build a command and another run it. Option order matters to ffmpeg, and
+// survives the trip because Options is a list rather than a map.
 type Command struct {
-	Global  Options
-	Inputs  []*Input
-	Outputs []*Output
+	Global  Options   `json:"global,omitempty"`
+	Inputs  []*Input  `json:"inputs,omitempty"`
+	Outputs []*Output `json:"outputs,omitempty"`
 }
 
 // Input is one -i with the options that precede it.
 type Input struct {
-	URL     string
-	Options Options
+	URL     string  `json:"url"`
+	Options Options `json:"options,omitempty"`
 }
 
 // Output is one output URL with the options and -map entries that precede it.
 type Output struct {
-	URL     string
-	Options Options
+	URL     string  `json:"url"`
+	Options Options `json:"options,omitempty"`
 }
 
 // NewCommand returns an empty Command. Add inputs and outputs with Input and
@@ -196,9 +202,9 @@ func baseName(name string) string {
 // Arg is one command-line option: "-name value", or "-name" alone when
 // HasValue is false. Name includes any stream specifier, e.g. "c:v:0".
 type Arg struct {
-	Name     string
-	Value    string
-	HasValue bool
+	Name     string `json:"name"`
+	Value    string `json:"value,omitempty"`
+	HasValue bool   `json:"has_value,omitempty"`
 }
 
 // Options is an ordered list of ffmpeg options. Order matters to ffmpeg in a
@@ -208,6 +214,23 @@ type Options []Arg
 
 // Opt appends one or more Args to an Options list.
 type Opt func(*Options)
+
+// Opts renders option constructors into an Options list. The settings
+// structs in encode and tasks store their extra options as Options rather
+// than Opt so they stay plain data; build them with this:
+//
+//	encode.Video{Codec: encode.H264, Extra: ffmpeg.Opts(ffmpeg.CRF(0))}
+func Opts(opts ...Opt) Options {
+	var o Options
+	o.Add(opts...)
+	return o
+}
+
+// Opt returns an Opt appending these args, so a stored Options list can be
+// passed where option constructors are expected.
+func (o Options) Opt() Opt {
+	return func(dst *Options) { *dst = append(*dst, o...) }
+}
 
 // Add applies opts in order.
 func (o *Options) Add(opts ...Opt) *Options {

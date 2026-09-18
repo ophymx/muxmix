@@ -148,3 +148,60 @@ func TestTranscodeLive(t *testing.T) {
 		t.Errorf("metadata not carried: %v", res.Format.Tags)
 	}
 }
+
+// A plan can be built in one process and run in another: the options, the
+// probe it is planned against and the command it renders are all data.
+func TestPlanSurvivesJSON(t *testing.T) {
+	info := captureInfo(t, "multi_mkv.basic.json")
+	opts := TranscodeOptions{
+		Video: VideoRule{
+			CopyCodecs: AllCodecs,
+			Encode:     encode.Video{Codec: encode.H264, Quality: 20, Extra: ffmpeg.Opts(ffmpeg.X264Params("aq-mode=3"))},
+			MaxHeight:  720,
+		},
+		Audio: AudioRule{Encode: encode.Audio{Codec: encode.AAC, Bitrate: "128k"}, Languages: []string{"eng"}},
+		Extra: ffmpeg.Opts(ffmpeg.Set("max_muxing_queue_size", "1024")),
+	}
+	want, err := BuildTranscodePlan(info, nil, "multi.mkv", "out.mp4", opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The options and the probe cross a wire, and the far side re-plans.
+	optsJSON, err := json.Marshal(opts)
+	if err != nil {
+		t.Fatalf("marshal options: %v", err)
+	}
+	infoJSON, err := json.Marshal(info)
+	if err != nil {
+		t.Fatalf("marshal info: %v", err)
+	}
+	var backOpts TranscodeOptions
+	var backInfo Info
+	if err := json.Unmarshal(optsJSON, &backOpts); err != nil {
+		t.Fatalf("unmarshal options: %v", err)
+	}
+	if err := json.Unmarshal(infoJSON, &backInfo); err != nil {
+		t.Fatalf("unmarshal info: %v", err)
+	}
+	got, err := BuildTranscodePlan(&backInfo, nil, "multi.mkv", "out.mp4", backOpts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if args(got) != args(want) {
+		t.Errorf("replanned args\n got %s\nwant %s", args(got), args(want))
+	}
+
+	// Or the rendered command crosses it instead.
+	cmdJSON, err := json.Marshal(want.Command)
+	if err != nil {
+		t.Fatalf("marshal command: %v", err)
+	}
+	var backCmd ffmpeg.Command
+	if err := json.Unmarshal(cmdJSON, &backCmd); err != nil {
+		t.Fatalf("unmarshal command: %v", err)
+	}
+	if got := strings.Join(backCmd.Args(), " "); got != args(want) {
+		t.Errorf("command args\n got %s\nwant %s", got, args(want))
+	}
+}

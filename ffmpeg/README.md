@@ -44,6 +44,15 @@ than the flag:
 Anything else goes through `Set(name, value)`, `Flag(name)` or
 `Raw(args...)`. `Command.String()` renders a shell-quoted line for logs.
 
+A `Command` itself is plain data -- no functions, no handles -- so it
+round-trips through `encoding/json` with the same `Args()` on the far side,
+and option order survives because `Options` is a list rather than a map.
+One process can build a command and another run it. The settings structs
+that carry options as data (the `Extra` fields in `encode` and `tasks`)
+hold an `Options` for the same reason; `Opts(...)` builds one from the
+constructors above, and `Options.Opt()` passes one back to an API that
+wants constructors.
+
 `Validate` (which `Run` calls) rejects a command with no inputs or
 outputs, and options in a place ffmpeg does not accept them: a global-only
 option such as `FilterComplex` on an output, an input-only one such as

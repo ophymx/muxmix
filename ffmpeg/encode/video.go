@@ -38,7 +38,8 @@ type Video struct {
 	// KeyframeInterval sets -g in frames; 0 leaves the default.
 	KeyframeInterval int
 	// Extra options are appended last and override anything above.
-	Extra []ffmpeg.Opt
+	// Build one with ffmpeg.Opts; it is data so Video can be serialized.
+	Extra ffmpeg.Options
 }
 
 // ResolveEncoder returns the encoder these settings will use.
@@ -78,7 +79,7 @@ func (v Video) MustOpts(set *caps.Set) []ffmpeg.Opt {
 func (v Video) OptsFor(encoder string) []ffmpeg.Opt {
 	out := opts(ffmpeg.VideoCodec(encoder))
 	if encoder == "copy" {
-		return append(out, v.Extra...)
+		return append(out, v.Extra.Opt())
 	}
 	fam := family(encoder)
 
@@ -163,7 +164,7 @@ func (v Video) OptsFor(encoder string) []ffmpeg.Opt {
 	if v.KeyframeInterval > 0 {
 		out = append(out, ffmpeg.GOP(v.KeyframeInterval))
 	}
-	return append(out, v.Extra...)
+	return append(out, v.Extra.Opt())
 }
 
 // ─── encoder families ──────────────────────────────────────────────────────
