@@ -29,11 +29,34 @@ type Backend interface {
 	// when the backend needs none.
 	DeviceArgs(device string) ([]string, error)
 	// Filter returns the filter chain that runs extraFilters and then
-	// moves frames to the device.
-	Filter(extraFilters ...string) (string, error)
+	// moves frames to the device, uploading them in format ("nv12",
+	// "p010"). An empty format means the backend's own default, which is
+	// 8-bit.
+	Filter(format string, extraFilters ...string) (string, error)
 	// VideoCodec maps a codec name ("h264") to the backend's encoder.
 	VideoCodec(codec string) (string, error)
 }
+
+// VideoCodecLister is the optional half of Backend that lists the codecs
+// it maps, so Detect knows which encoders to probe on the device. A
+// Backend that does not implement it is probed for CommonCodecs.
+type VideoCodecLister interface {
+	// VideoCodecs lists the codec names VideoCodec accepts.
+	VideoCodecs() []string
+}
+
+// EncoderProber is the optional half of Backend that builds its own
+// encoder probe command. Without it, Detect builds one from DeviceArgs
+// and Filter: a tiny synthetic frame, uploaded, encoded, discarded.
+type EncoderProber interface {
+	// EncoderProbeArgs returns a complete ffmpeg argument list that
+	// succeeds only when encoder encodes on device.
+	EncoderProbeArgs(device, encoder string) ([]string, error)
+}
+
+// CommonCodecs are the codecs Detect probes for a Backend that does not
+// implement VideoCodecLister.
+var CommonCodecs = []string{"h264", "hevc", "av1", "vp9", "vp8", "mjpeg", "prores"}
 
 var registry = struct {
 	mu       sync.RWMutex

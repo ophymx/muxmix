@@ -76,7 +76,8 @@ func DetectCached(ctx context.Context, runner baseffmpeg.Runner, path string, ma
 }
 
 // stale returns ErrCacheStale (wrapped with the reason) when the System
-// no longer describes this binary and host.
+// no longer describes this binary and host, or when it was probed with
+// less detail than the options now ask for.
 func (s *System) stale(version string, maxAge time.Duration, options ProbeOptions) error {
 	if s.Caps == nil || s.Caps.Version == nil || s.Caps.Version.Version != version {
 		return fmt.Errorf("%w: ffmpeg version changed", ErrCacheStale)
@@ -97,6 +98,28 @@ func (s *System) stale(version string, maxAge time.Duration, options ProbeOption
 		slices.Sort(now)
 		if !slices.Equal(probed, now) {
 			return fmt.Errorf("%w: %s devices changed", ErrCacheStale, kind)
+		}
+		if options.NoEncoderProbe {
+			continue
+		}
+		want := encoderProbeCodecs(s.Caps, kind, options.Codecs)
+		for _, p := range s.Probes[kind] {
+			if !p.Available {
+				continue
+			}
+			var have []string
+			for _, e := range p.Encoders {
+				if e.Works && len(e.Formats) == 0 {
+					return fmt.Errorf("%w: %s upload formats not probed", ErrCacheStale, kind)
+				}
+				have = append(have, e.Codec)
+			}
+			slices.Sort(have)
+			wantSorted := slices.Clone(want)
+			slices.Sort(wantSorted)
+			if !slices.Equal(have, wantSorted) {
+				return fmt.Errorf("%w: %s encoders not probed", ErrCacheStale, kind)
+			}
 		}
 	}
 	return nil

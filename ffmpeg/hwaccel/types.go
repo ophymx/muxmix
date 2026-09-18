@@ -37,15 +37,55 @@ type ProbeOptions struct {
 	// Devices overrides the device candidates per backend; a kind not
 	// listed uses the backend's own defaults.
 	Devices map[Kind][]string
+	// Codecs limits the encoder probes to these codecs; nil probes every
+	// codec the backend maps and the build has an encoder for.
+	Codecs []string
+	// NoEncoderProbe stops Detect from probing encoders at all, leaving
+	// only the device probes. Selection then trusts the build's encoder
+	// list, which can offer a codec the device cannot encode.
+	NoEncoderProbe bool
 }
 
-// ProbeResult is the outcome of trying one backend on one device.
+// ProbeResult is the outcome of trying one backend on one device: whether
+// the device initialised and, when it did, which of the backend's encoders
+// actually encoded a frame on it.
 type ProbeResult struct {
 	Kind      Kind     `json:"kind"`
 	Device    string   `json:"device,omitempty"`
 	Args      []string `json:"args,omitempty"`
 	Available bool     `json:"available"`
 	Error     string   `json:"error,omitempty"`
+	// Encoders is one entry per codec probed on this device, in codec
+	// order. It is empty when the device did not initialise, when
+	// ProbeOptions.NoEncoderProbe was set, or when the System was built
+	// by hand; Select then trusts the build's encoder list.
+	Encoders []EncoderProbe `json:"encoders,omitempty"`
+}
+
+// EncoderProbe is the outcome of encoding one frame with one encoder on
+// one device. A build can carry an encoder the silicon does not implement
+// -- av1_vaapi on a chip without AV1 encode, av1_nvenc before Ada -- and
+// only running it tells the two apart.
+type EncoderProbe struct {
+	Codec   string `json:"codec"`
+	Encoder string `json:"encoder"`
+	Works   bool   `json:"works"`
+	// Formats are the upload formats that encoded, 8-bit first ("nv12",
+	// "p010"). A device whose list has p010 keeps a 10-bit source at 10
+	// bits; see System.PreserveDepth.
+	Formats []string `json:"formats,omitempty"`
+	Error   string   `json:"error,omitempty"`
+}
+
+// encoder returns the probe for codec, if it was probed.
+func (p ProbeResult) encoder(codec string) (EncoderProbe, bool) {
+	codec = normalizeCodec(codec)
+	for _, e := range p.Encoders {
+		if e.Codec == codec {
+			return e, true
+		}
+	}
+	return EncoderProbe{}, false
 }
 
 // System is what one ffmpeg binary can do on this machine: the build's
@@ -92,15 +132,52 @@ func (s *System) Available(kind Kind) bool {
 // Device returns the first device the backend initialised on. The device
 // is "" for backends that take none.
 func (s *System) Device(kind Kind) (string, bool) {
+	probe, ok := s.availableProbe(kind)
+	return probe.Device, ok
+}
+
+// availableProbe returns the first probe on which the backend initialised.
+func (s *System) availableProbe(kind Kind) (ProbeResult, bool) {
 	if s == nil {
-		return "", false
+		return ProbeResult{}, false
 	}
 	for _, probe := range s.Probes[NormalizeKind(string(kind))] {
 		if probe.Available {
-			return probe.Device, true
+			return probe, true
 		}
 	}
-	return "", false
+	return ProbeResult{}, false
+}
+
+// PreserveDepth returns sel with the upload format to use for a source in
+// srcPixFmt. A deep source keeps its depth when the device encoded that
+// format during detection, and is flattened to 8-bit explicitly when it
+// did not -- CUDA uploads a source's own format by default, so without
+// the explicit nv12 a 10-bit source reaches an 8-bit-only encoder and the
+// job fails. An 8-bit source, a software selection, or a System with no
+// probe for that encoder comes back unchanged.
+func (s *System) PreserveDepth(sel Selection, srcPixFmt string) Selection {
+	if !sel.Hardware() {
+		return sel
+	}
+	format := deepUploadFormat(srcPixFmt)
+	if format == "" {
+		return sel
+	}
+	probe, ok := s.availableProbe(sel.Kind)
+	if !ok {
+		return sel
+	}
+	e, probed := probe.encoder(sel.Codec)
+	if !probed {
+		return sel
+	}
+	if slices.Contains(e.Formats, format) {
+		sel.Format = format
+	} else {
+		sel.Format = NV12
+	}
+	return sel
 }
 
 // AvailableKinds lists the backends that initialised, in registration order.
@@ -124,8 +201,9 @@ func (s *System) HasEncoder(name string) bool {
 	return s.Caps.HasEncoder(name)
 }
 
-// SupportsCodec reports whether the backend is usable here and the build
-// has its encoder for codec.
+// SupportsCodec reports whether the backend is usable here and its
+// encoder for codec is in the build and, when Detect probed it, worked on
+// the device.
 func (s *System) SupportsCodec(kind Kind, codec string) bool {
 	_, err := s.check(kind, codec)
 	return err == nil
@@ -152,6 +230,11 @@ func (s *System) check(kind Kind, codec string) (string, error) {
 			}
 		}
 		return "", fmt.Errorf("not probed")
+	}
+	if probe, ok := s.availableProbe(kind); ok {
+		if e, probed := probe.encoder(codec); probed && !e.Works {
+			return "", fmt.Errorf("%s did not encode on %s: %s", encoder, probe.deviceLabel(), firstLine(e.Error))
+		}
 	}
 	return encoder, nil
 }
@@ -232,4 +315,13 @@ func sortProbes(probes []ProbeResult) {
 		}
 		return strings.Compare(a.Device, b.Device)
 	})
+}
+
+// deviceLabel names the device for an error message, for backends that
+// take none as well.
+func (p ProbeResult) deviceLabel() string {
+	if p.Device == "" {
+		return string(p.Kind)
+	}
+	return p.Device
 }

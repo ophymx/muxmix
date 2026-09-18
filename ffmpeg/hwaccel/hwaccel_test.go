@@ -56,6 +56,7 @@ func TestDetect(t *testing.T) {
 	fake := fakeFFmpeg(t, "vaapi\nqsv", vaapiQSVEncoders, `
   *"-init_hw_device vaapi=probe:/dev/fake-renderD128"*) exit 0 ;;
   *"-init_hw_device qsv=probe:/dev/fake-renderD129"*) echo "qsv runtime unavailable" >&2; exit 1 ;;
+  *"-c:v h264_vaapi"*) exit 0 ;;
 `)
 	runner := baseffmpeg.New(baseffmpeg.WithBinary(fake))
 	opts := ProbeOptions{
@@ -120,11 +121,127 @@ func TestDetect(t *testing.T) {
 func TestDetectWithCapsNilSet(t *testing.T) {
 	fake := fakeFFmpeg(t, "", "", `
   *"cuda=probe"*) exit 0 ;;
+  *"-c:v av1_nvenc"*) echo "Codec not supported" >&2; exit 1 ;;
+  *"-c:v "*) exit 0 ;;
 `)
 	runner := baseffmpeg.New(baseffmpeg.WithBinary(fake))
 	sys := DetectWithCaps(context.Background(), runner, nil, ProbeOptions{Kinds: []Kind{CUDA}})
 	if !sys.Available(CUDA) || !sys.SupportsCodec(CUDA, "hevc") {
-		t.Errorf("nil caps should probe and trust encoders: %+v", sys.Probes)
+		t.Errorf("nil caps should probe every codec: %+v", sys.Probes)
+	}
+	if sys.SupportsCodec(CUDA, "av1") {
+		t.Error("an encoder that failed its probe is not supported, caps or no caps")
+	}
+}
+
+// TestEncoderProbeRejectsUnsupportedCodec covers the case the build
+// capabilities cannot see: the encoder is compiled in and the device
+// initialises, but the silicon does not implement that codec. Only
+// running it says so, and Select has to believe the probe over the build.
+func TestEncoderProbeRejectsUnsupportedCodec(t *testing.T) {
+	const encoders = ` V....D h264_vaapi           H.264/AVC (VAAPI)
+ V....D av1_vaapi            AV1 (VAAPI)
+ V....D libsvtav1            SVT-AV1`
+	fake := fakeFFmpeg(t, "vaapi", encoders, `
+  *"vaapi=probe:/dev/fake"*) exit 0 ;;
+  *"-c:v av1_vaapi"*) echo "[av1_vaapi @ 0x0] No usable encoding profile found." >&2; exit 218 ;;
+  *"-c:v h264_vaapi"*) exit 0 ;;
+`)
+	runner := baseffmpeg.New(baseffmpeg.WithBinary(fake))
+	opts := ProbeOptions{Kinds: []Kind{VAAPI}, Devices: map[Kind][]string{VAAPI: {"/dev/fake"}}}
+	sys, err := Detect(context.Background(), runner, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	probe := sys.Probes[VAAPI][0]
+	if len(probe.Encoders) != 2 {
+		t.Fatalf("probed encoders = %+v", probe.Encoders)
+	}
+	if e, ok := probe.encoder("av1"); !ok || e.Works || e.Encoder != "av1_vaapi" {
+		t.Errorf("av1 probe = %+v", e)
+	}
+	if e, ok := probe.encoder("h264"); !ok || !e.Works {
+		t.Errorf("h264 probe = %+v", e)
+	}
+	if !sys.SupportsCodec(VAAPI, "h264") {
+		t.Error("h264 encoded on the device and must stay selectable")
+	}
+	if sys.SupportsCodec(VAAPI, "av1") {
+		t.Error("av1 is in the build but not in the silicon")
+	}
+	_, err = sys.Select("av1")
+	if err == nil || !strings.Contains(err.Error(), "av1_vaapi did not encode on /dev/fake: [av1_vaapi @ 0x0] No usable encoding profile found.") {
+		t.Errorf("Select(av1) = %v", err)
+	}
+	// The point of the probe: PreferHardware falls back instead of
+	// building a command that dies mid-job.
+	sel, reason, err := PreferHardware().Resolve(sys, "av1")
+	if err != nil || sel.Hardware() || !strings.Contains(reason, "did not encode") {
+		t.Errorf("Resolve(av1) = %+v %q %v", sel, reason, err)
+	}
+	if _, _, err := RequireHardware().Resolve(sys, "av1"); err == nil {
+		t.Error("RequireHardware must fail for a codec the device cannot encode")
+	}
+}
+
+func TestProbeOptionsNarrowEncoderProbes(t *testing.T) {
+	const encoders = ` V....D h264_vaapi           H.264/AVC (VAAPI)
+ V....D hevc_vaapi           H.265/HEVC (VAAPI)`
+	probes := `
+  *"vaapi=probe:/dev/fake"*) exit 0 ;;
+  *"-c:v "*) exit 0 ;;
+`
+	runner := baseffmpeg.New(baseffmpeg.WithBinary(fakeFFmpeg(t, "vaapi", encoders, probes)))
+	base := ProbeOptions{Kinds: []Kind{VAAPI}, Devices: map[Kind][]string{VAAPI: {"/dev/fake"}}}
+
+	narrowed := base
+	narrowed.Codecs = []string{"hevc"}
+	sys, err := Detect(context.Background(), runner, narrowed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := sys.Probes[VAAPI][0].Encoders; len(got) != 1 || got[0].Codec != "hevc" {
+		t.Errorf("Codecs narrowing = %+v", got)
+	}
+	if !sys.SupportsCodec(VAAPI, "h264") {
+		t.Error("a codec left out of Codecs is trusted, not rejected")
+	}
+
+	skipped := base
+	skipped.NoEncoderProbe = true
+	sys, err = Detect(context.Background(), runner, skipped)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := sys.Probes[VAAPI][0].Encoders; len(got) != 0 {
+		t.Errorf("NoEncoderProbe still probed: %+v", got)
+	}
+	if !sys.SupportsCodec(VAAPI, "hevc") {
+		t.Error("without encoder probes the build's encoder list is trusted")
+	}
+}
+
+func TestProbeEncoderArgs(t *testing.T) {
+	fake := fakeFFmpeg(t, "", "", `
+  *) echo "args: $*" >&2; exit 1 ;;
+`)
+	runner := baseffmpeg.New(baseffmpeg.WithBinary(fake))
+	for _, tc := range []struct {
+		kind   Kind
+		device string
+		codec  string
+		want   string
+	}{
+		{VAAPI, "/dev/fake", "h264", "-init_hw_device vaapi=hw:/dev/fake -filter_hw_device hw -f lavfi -i color=s=320x240:d=0.1 -vf format=nv12,hwupload -frames:v 1 -c:v h264_vaapi -f null -"},
+		{CUDA, "", "hevc", "-init_hw_device cuda=hw -filter_hw_device hw -f lavfi -i color=s=320x240:d=0.1 -vf format=nv12,hwupload_cuda -frames:v 1 -c:v hevc_nvenc -f null -"},
+	} {
+		probe := ProbeEncoder(context.Background(), runner, tc.kind, tc.device, tc.codec)
+		if probe.Works || !strings.Contains(probe.Error, tc.want) {
+			t.Errorf("%s probe error = %q\nwant args %q", tc.kind, probe.Error, tc.want)
+		}
+	}
+	if p := ProbeEncoder(context.Background(), runner, VAAPI, "/dev/fake", "prores"); p.Works || !strings.Contains(p.Error, "not supported") {
+		t.Errorf("unmapped codec = %+v", p)
 	}
 }
 
@@ -150,8 +267,11 @@ func handSystem() *System {
 			HWAccels: []string{"vaapi", "cuda"},
 		},
 		Probes: map[Kind][]ProbeResult{
-			VAAPI: {{Kind: VAAPI, Device: "/dev/dri/renderD128", Available: true}},
-			CUDA:  {{Kind: CUDA, Error: "Cannot load libcuda.so.1\nmore detail"}},
+			VAAPI: {{
+				Kind: VAAPI, Device: "/dev/dri/renderD128", Available: true,
+				Encoders: []EncoderProbe{{Codec: "h264", Encoder: "h264_vaapi", Works: true, Formats: []string{NV12}}},
+			}},
+			CUDA: {{Kind: CUDA, Error: "Cannot load libcuda.so.1\nmore detail"}},
 		},
 		DetectedAt: time.Now(),
 	}
@@ -233,8 +353,11 @@ func (fakeBackend) Kind() Kind                            { return "topaz" }
 func (fakeBackend) DefaultDevices() []string              { return []string{"gpu0"} }
 func (fakeBackend) ProbeArgs(d string) ([]string, error)  { return []string{"-probe", d}, nil }
 func (fakeBackend) DeviceArgs(d string) ([]string, error) { return []string{"-topaz_device", d}, nil }
-func (fakeBackend) Filter(extra ...string) (string, error) {
-	return joinFilters(extra, "topazupload"), nil
+func (fakeBackend) Filter(format string, extra ...string) (string, error) {
+	if format == "" {
+		return joinFilters(extra, "topazupload"), nil
+	}
+	return joinFilters(extra, "topazupload="+format), nil
 }
 func (fakeBackend) VideoCodec(codec string) (string, error) {
 	return codecTable{"h264": "h264_topaz"}.encoder(codec)
@@ -262,6 +385,74 @@ func TestRegisterBackend(t *testing.T) {
 		}
 	}()
 	Register(fakeBackend{})
+}
+
+// TestPreserveDepth covers the other half of what an encoder probe
+// learns: a device that encodes a codec at all may still only encode it
+// 8-bit, and uploading a 10-bit source as nv12 throws away depth the
+// hardware could have kept.
+func TestPreserveDepth(t *testing.T) {
+	sys := &System{
+		Caps: &caps.Set{
+			Version: &baseffmpeg.VersionInfo{Version: "7.1.5"},
+			Encoders: []caps.Codec{
+				{Name: "h264_vaapi", Type: caps.Video}, {Name: "hevc_vaapi", Type: caps.Video},
+			},
+			HWAccels: []string{"vaapi"},
+		},
+		Probes: map[Kind][]ProbeResult{
+			VAAPI: {{Kind: VAAPI, Device: "/dev/fake", Available: true, Encoders: []EncoderProbe{
+				// As on a Tiger Lake iGPU: HEVC encodes 10-bit, H.264 does not.
+				{Codec: "h264", Encoder: "h264_vaapi", Works: true, Formats: []string{NV12}},
+				{Codec: "hevc", Encoder: "hevc_vaapi", Works: true, Formats: []string{NV12, P010}},
+			}}},
+		},
+		DetectedAt: time.Now(),
+	}
+
+	hevc, err := sys.Select("hevc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	deep := sys.PreserveDepth(hevc, "yuv420p10le")
+	if deep.Format != P010 {
+		t.Errorf("10-bit source on a p010 device = %q, want p010", deep.Format)
+	}
+	if got := deep.Filter("scale=1280:-2"); got != "scale=1280:-2,format=p010,hwupload" {
+		t.Errorf("filter = %q", got)
+	}
+	if got := deep.String(); got != "hevc_vaapi p010 on /dev/fake" {
+		t.Errorf("String = %q", got)
+	}
+	if got := sys.PreserveDepth(hevc, "yuv420p").Format; got != "" {
+		t.Errorf("8-bit source must stay 8-bit, got %q", got)
+	}
+	if got := sys.PreserveDepth(hevc, "yuv422p10le").Format; got != "" {
+		t.Errorf("a layout the pipeline does not carry is left alone, got %q", got)
+	}
+
+	h264, err := sys.Select("h264")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// h264 never encoded p010 on this device, so the 10-bit source is
+	// flattened -- and said to be flattened, rather than left to the
+	// backend's default, which for CUDA is the source's own format.
+	if got := sys.PreserveDepth(h264, "yuv420p10le"); got.Format != NV12 {
+		t.Errorf("h264 should flatten to nv12 explicitly; got %q", got.Format)
+	}
+	if got := h264.Filter(); got != "format=nv12,hwupload" {
+		t.Errorf("default upload = %q", got)
+	}
+
+	// A System with no encoder probes has no evidence, so it stays 8-bit.
+	if got := handSystem().PreserveDepth(Selection{Kind: VAAPI, Encoder: "hevc_vaapi", Codec: "hevc"}, "yuv420p10le"); got.Format != "" {
+		t.Errorf("unprobed System = %q", got.Format)
+	}
+	var sw Selection
+	if got := sys.PreserveDepth(sw, "yuv420p10le"); got.Format != "" {
+		t.Error("software selection must not gain an upload format")
+	}
 }
 
 func TestVideoEncoder(t *testing.T) {

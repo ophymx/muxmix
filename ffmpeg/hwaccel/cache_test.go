@@ -44,11 +44,38 @@ func TestCacheRoundTrip(t *testing.T) {
 	if err := got.stale("7.1.5", 0, moved); !errors.Is(err, ErrCacheStale) {
 		t.Errorf("device change: %v", err)
 	}
+
+	// A cache written before the encoders were probed does not know which
+	// codecs the device really encodes, so it has to be redone.
+	unprobed := *got
+	unprobed.Probes = map[Kind][]ProbeResult{
+		VAAPI: {{Kind: VAAPI, Device: "/dev/dri/renderD128", Available: true}},
+		CUDA:  got.Probes[CUDA],
+	}
+	if err := unprobed.stale("7.1.5", 0, opts); !errors.Is(err, ErrCacheStale) {
+		t.Errorf("cache without encoder probes: %v", err)
+	}
+	if err := unprobed.stale("7.1.5", 0, ProbeOptions{NoEncoderProbe: true, Devices: opts.Devices}); err != nil {
+		t.Errorf("NoEncoderProbe must not care about encoder probes: %v", err)
+	}
+
+	// Nor does a cache that probed the codec but not its upload formats
+	// still describe the host: PreserveDepth would read it as 8-bit only.
+	noFormats := *got
+	noFormats.Probes = map[Kind][]ProbeResult{
+		VAAPI: {{Kind: VAAPI, Device: "/dev/dri/renderD128", Available: true,
+			Encoders: []EncoderProbe{{Codec: "h264", Encoder: "h264_vaapi", Works: true}}}},
+		CUDA: got.Probes[CUDA],
+	}
+	if err := noFormats.stale("7.1.5", 0, opts); !errors.Is(err, ErrCacheStale) {
+		t.Errorf("cache without upload formats: %v", err)
+	}
 }
 
 func TestDetectCached(t *testing.T) {
 	fake := fakeFFmpeg(t, "vaapi", vaapiQSVEncoders, `
   *"vaapi=probe:/dev/fake"*) exit 0 ;;
+  *"-c:v h264_vaapi"*) exit 0 ;;
 `)
 	runner := baseffmpeg.New(baseffmpeg.WithBinary(fake))
 	path := filepath.Join(t.TempDir(), "cache.json")

@@ -89,8 +89,13 @@ fmt.Println(v.CodecName, v.Width.Int(), v.Height.Int(), v.FrameRate().Float64(),
 ```
 
 Hardware acceleration gets the same treatment from the other direction:
-`ffmpeg -hwaccels` only says what was compiled in, so `hwaccel` initialises
-each backend for real and remembers which ones work on this machine.
+`ffmpeg -hwaccels` only says what was compiled in, and its encoder list is
+no better -- a build carries `av1_vaapi` on a chip with no AV1 encoder. So
+`hwaccel` initialises each backend for real, encodes one frame with every
+encoder it offers, in 8-bit and 10-bit, and remembers what this machine
+actually does. That is what makes a "prefer hardware" policy fall back
+instead of failing mid-job, and what keeps a 10-bit master from being
+flattened by the upload on hardware that could have kept it.
 
 ## Requirements
 
@@ -106,8 +111,14 @@ conformance tests need no ffmpeg installed:
 go test ./...        # passes with no ffmpeg on PATH
 ```
 
-Tests that exercise a live binary skip when it is absent. CI covers Linux,
-macOS and Windows. `matrix/` holds Docker images for the distributions
+Tests that exercise a live binary skip when it is absent. Tests that need
+a GPU are off by default; on a machine with one, run them with:
+
+```sh
+MUXMIX_HWACCEL_TEST=1 go test ./ffmpeg/hwaccel ./tasks -run Hardware
+```
+
+CI covers Linux, macOS and Windows. `matrix/` holds Docker images for the distributions
 carrying each release line; `matrix/test.sh` runs the whole suite inside
 every one of them, so the runner, progress pipe, cancellation, analysis
 filters and tasks are checked against each release before a release of our

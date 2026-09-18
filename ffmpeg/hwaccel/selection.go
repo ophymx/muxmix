@@ -19,21 +19,31 @@ type Selection struct {
 	Device  string `json:"device,omitempty"`
 	Encoder string `json:"encoder,omitempty"`
 	Codec   string `json:"codec"`
+	// Format is the pixel format frames are uploaded in ("nv12", "p010").
+	// Empty means the backend's default, which is 8-bit: a 10-bit source
+	// is flattened on the way to the device. System.PreserveDepth fills
+	// it in when the device proved it encodes the deeper format.
+	Format string `json:"format,omitempty"`
 }
 
 // Hardware reports whether the selection uses a hardware backend.
 func (s Selection) Hardware() bool { return s.Kind != None }
 
 // String reads "h264_vaapi on /dev/dri/renderD128", "hevc_nvenc (cuda)"
-// or "software".
+// or "software", with the upload format when it is not the 8-bit default:
+// "hevc_vaapi p010 on /dev/dri/renderD128".
 func (s Selection) String() string {
 	if !s.Hardware() {
 		return "software"
 	}
-	if s.Device != "" {
-		return s.Encoder + " on " + s.Device
+	name := s.Encoder
+	if s.Format != "" && s.Format != NV12 {
+		name += " " + s.Format
 	}
-	return s.Encoder + " (" + string(s.Kind) + ")"
+	if s.Device != "" {
+		return name + " on " + s.Device
+	}
+	return name + " (" + string(s.Kind) + ")"
 }
 
 // GlobalOpts returns the global options that initialise the device, for
@@ -52,14 +62,14 @@ func (s Selection) GlobalOpts() baseffmpeg.Opt {
 
 // Filter returns the filter chain that runs the given filters and then
 // moves frames to the device: "scale=1280:-2,format=nv12,hwupload" for
-// VAAPI. Empty filters are dropped. Software selections return the
-// filters joined.
+// VAAPI, or format=p010 when the Selection uploads 10-bit. Empty filters
+// are dropped. Software selections return the filters joined.
 func (s Selection) Filter(filters ...string) string {
 	b, ok := Lookup(s.Kind)
 	if !ok {
 		return joinFilters(filters)
 	}
-	chain, err := b.Filter(filters...)
+	chain, err := b.Filter(s.Format, filters...)
 	if err != nil {
 		return joinFilters(filters)
 	}
