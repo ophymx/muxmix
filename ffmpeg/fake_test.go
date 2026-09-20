@@ -75,6 +75,14 @@ func fakeFFmpeg(scenario string, args []string) int {
 		fmt.Fprintln(os.Stderr, "Error opening input file missing.mp4.")
 		fmt.Fprintln(os.Stderr, "Conversion failed!")
 		return 254
+	case "chatty":
+		// A long run's log: many lines, the ones that matter last.
+		for i := range 2000 {
+			fmt.Fprintf(os.Stderr, "log line %04d filler filler filler filler\n", i)
+		}
+		fmt.Fprintln(os.Stderr, "[in#0] Error opening input: No such file or directory")
+		fmt.Fprintln(os.Stderr, "Conversion failed!")
+		return 254
 	case "report":
 		spec := os.Getenv("FFREPORT")
 		if !strings.HasPrefix(spec, "file=") {

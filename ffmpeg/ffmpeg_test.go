@@ -47,6 +47,63 @@ func TestRunProgressPipe(t *testing.T) {
 	}
 }
 
+// TestRunCaptureLimit covers the cap on Result.Stderr: a run that never
+// ends must not grow it without bound, and what it keeps has to be the
+// end, where ffmpeg puts the error.
+func TestRunCaptureLimit(t *testing.T) {
+	const limit = 4096
+	cmd := ffmpeg.NewCommand().Input("in.mp4").Output("out.mp4")
+
+	// What the scenario writes, measured rather than counted by hand.
+	uncapped, _ := fakeRunner(t, "chatty").Run(context.Background(), cmd, ffmpeg.CaptureLimit(0))
+	total := int64(len(uncapped.Stderr))
+	if total <= limit || uncapped.StderrDropped != 0 {
+		t.Fatalf("uncapped run: %d bytes, dropped %d", total, uncapped.StderrDropped)
+	}
+
+	// Both stderr paths: plain capture, and the stats reader that tees
+	// through the same sink.
+	for _, tc := range []struct {
+		name string
+		opts []ffmpeg.RunOption
+	}{
+		{"plain", nil},
+		{"stats reader", []ffmpeg.RunOption{ffmpeg.OnProgress(func(ffmpeg.Progress) {}), ffmpeg.NoProgressPipe()}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := fakeRunner(t, "chatty")
+			res, err := r.Run(context.Background(), cmd, append(tc.opts, ffmpeg.CaptureLimit(limit))...)
+			if err == nil {
+				t.Fatal("want the scenario's failure")
+			}
+			if len(res.Stderr) > limit {
+				t.Errorf("kept %d bytes, limit %d", len(res.Stderr), limit)
+			}
+			if res.StderrDropped == 0 {
+				t.Error("StderrDropped = 0, want the dropped head counted")
+			}
+			if got := int64(len(res.Stderr)) + res.StderrDropped; got != total {
+				t.Errorf("kept+dropped = %d, want %d", got, total)
+			}
+			// The tail is the half worth keeping: the error survives.
+			if !strings.Contains(err.Error(), "Error opening input") {
+				t.Errorf("error lost the message: %v", err)
+			}
+			if strings.Contains(string(res.Stderr), "log line 0000") {
+				t.Error("kept the oldest line, so it did not drop from the front")
+			}
+		})
+	}
+
+	t.Run("the default leaves an ordinary log alone", func(t *testing.T) {
+		r := fakeRunner(t, "fail")
+		res, _ := r.Run(context.Background(), cmd)
+		if res.StderrDropped != 0 || !strings.Contains(string(res.Stderr), "Error opening input") {
+			t.Errorf("dropped=%d stderr=%q", res.StderrDropped, res.Stderr)
+		}
+	})
+}
+
 func TestRunStatsFallback(t *testing.T) {
 	r := fakeRunner(t, "stats")
 	var n int

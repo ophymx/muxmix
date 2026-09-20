@@ -76,9 +76,14 @@ type Result struct {
 	Duration   time.Duration
 
 	// Stdout holds captured standard output unless Stdout was redirected.
+	// It is not capped: redirect it with the Stdout option when the output
+	// URL is pipe:1 and the payload is large or endless.
 	Stdout []byte
-	// Stderr holds ffmpeg's log output.
+	// Stderr holds ffmpeg's log output, the last CaptureLimit bytes of it.
 	Stderr []byte
+	// StderrDropped counts log bytes discarded to stay within that limit.
+	// It is zero for every run that stayed under it.
+	StderrDropped int64
 	// Progress is the last progress update received.
 	Progress Progress
 
@@ -234,6 +239,7 @@ type runConfig struct {
 	total          time.Duration
 	noProgressPipe bool
 	noDefaults     bool
+	captureLimit   int
 	// leading counts the default global args Run put in front of the
 	// command, so run can slot the progress options right after them.
 	leading int
@@ -304,6 +310,18 @@ func NoDefaultArgs() RunOption {
 	return func(c *runConfig) { c.noDefaults = true }
 }
 
+// CaptureLimit caps how many bytes of ffmpeg's log Result.Stderr keeps
+// (default DefaultCaptureLimit). Past the limit the oldest bytes are
+// dropped and Result.StderrDropped counts them; the error message and the
+// closing log lines, which sit at the end, always survive. Pass 0 to keep
+// everything, as runs did before the limit existed.
+//
+// The Stderr and WithStderr writers are unaffected: they still see every
+// byte as it arrives, which is where an endless run should send its log.
+func CaptureLimit(n int) RunOption {
+	return func(c *runConfig) { c.captureLimit = n }
+}
+
 // ─── package-level helpers ─────────────────────────────────────────────────
 
 // Run executes cmd on the default runner.
@@ -330,14 +348,20 @@ func (r *runner) ValidateInstall() error {
 	return nil
 }
 
+// newRunConfig applies opts over the per-run defaults.
+func newRunConfig(opts []RunOption) runConfig {
+	c := runConfig{captureLimit: DefaultCaptureLimit}
+	for _, o := range opts {
+		o(&c)
+	}
+	return c
+}
+
 func (r *runner) Run(ctx context.Context, cmd *Command, opts ...RunOption) (*Result, error) {
 	if err := cmd.Validate(); err != nil {
 		return nil, err
 	}
-	var c runConfig
-	for _, o := range opts {
-		o(&c)
-	}
+	c := newRunConfig(opts)
 	var args []string
 	if !c.noDefaults {
 		args = append(args, "-hide_banner", "-nostdin")
@@ -354,10 +378,7 @@ func (r *runner) Run(ctx context.Context, cmd *Command, opts ...RunOption) (*Res
 }
 
 func (r *runner) RunArgs(ctx context.Context, args []string, opts ...RunOption) (*Result, error) {
-	var c runConfig
-	for _, o := range opts {
-		o(&c)
-	}
+	c := newRunConfig(opts)
 	return r.run(ctx, append([]string(nil), args...), &c)
 }
 
@@ -424,7 +445,8 @@ func (r *runner) run(ctx context.Context, args []string, c *runConfig) (*Result,
 	}
 	cmd.Env = env
 
-	var stdoutBuf, stderrBuf bytes.Buffer
+	var stdoutBuf bytes.Buffer
+	stderrBuf := capture{Limit: c.captureLimit}
 	if c.stdout != nil {
 		cmd.Stdout = c.stdout
 	} else if r.stdout != nil {
@@ -532,6 +554,7 @@ func (r *runner) run(ctx context.Context, args []string, c *runConfig) (*Result,
 
 	res.Stdout = stdoutBuf.Bytes()
 	res.Stderr = stderrBuf.Bytes()
+	res.StderrDropped = stderrBuf.Dropped()
 	if cmd.ProcessState != nil {
 		res.ExitCode = cmd.ProcessState.ExitCode()
 	}

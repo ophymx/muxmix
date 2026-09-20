@@ -91,6 +91,11 @@ Run options:
   captured into the result unless redirected; use `Stdout` when an output
   is `pipe:1`. `Env` appends to the runner's environment for this run.
 - `Report(path)`: capture ffmpeg's full log via `FFREPORT`.
+- `CaptureLimit(n)`: how much of the log `Result.Stderr` keeps, 1 MiB by
+  default. Past it the oldest bytes go and `Result.StderrDropped` counts
+  them, so an endless run cannot grow the capture without bound; the error
+  message and the closing lines sit at the end and always survive. Pass 0
+  to keep everything. A `Stderr` writer still sees every byte.
 
 Cancelling the context sends SIGINT, which makes ffmpeg finish the file it
 is writing, and kills it only after the grace period (`WithGrace`).
