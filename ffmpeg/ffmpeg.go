@@ -444,6 +444,7 @@ func (r *runner) run(ctx context.Context, args []string, c *runConfig) (*Result,
 
 	// Progress readers run in their own goroutine and signal on done.
 	done := make(chan struct{})
+	closeStats := func() {}
 	deliver := func(p Progress) {
 		p.Fraction, p.ETA = -1, -1
 		if c.total > 0 {
@@ -475,12 +476,18 @@ func (r *runner) run(ctx context.Context, args []string, c *runConfig) (*Result,
 			}
 		}()
 	case c.onProgress != nil:
-		pipe, err := cmd.StderrPipe()
-		if err != nil {
-			return finish(err)
-		}
+		// An io.Pipe rather than cmd.StderrPipe: Wait closes a StderrPipe as
+		// soon as the child exits, losing whatever the reader had not read
+		// yet. With a plain writer Wait drains stderr first, honouring
+		// WaitDelay if the child leaked the fd.
+		pipe, statsW := io.Pipe()
+		cmd.Stderr = statsW
+		closeStats = func() { statsW.Close() }
 		go func() {
 			defer close(done)
+			// Keep draining once parsing stops (a scanner error, say):
+			// an unread io.Pipe would block the copy Wait is waiting on.
+			defer io.Copy(stderrSink, pipe) //nolint:errcheck
 			sr := NewStatsReader(io.TeeReader(pipe, stderrSink))
 			for {
 				p, err := sr.Read()
@@ -500,6 +507,8 @@ func (r *runner) run(ctx context.Context, args []string, c *runConfig) (*Result,
 			progressChild.Close()
 			progressPipe.Close()
 		}
+		closeStats()
+		<-done
 		if errors.Is(err, exec.ErrNotFound) {
 			return finish(ErrFFmpegNotFound)
 		}
@@ -510,6 +519,8 @@ func (r *runner) run(ctx context.Context, args []string, c *runConfig) (*Result,
 	}
 
 	waitErr := cmd.Wait()
+	// Wait has copied all of stderr into the pipe; closing it ends the read.
+	closeStats()
 	if progressPipe != nil {
 		// Wait already reaped the child, so the pipe has hit EOF; make sure
 		// the reader goroutine sees it even if ffmpeg leaked the fd.
