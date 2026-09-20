@@ -444,7 +444,7 @@ var containers = map[string]*containerInfo{
 	".mp4": {name: "mp4",
 		video: []string{"h264", "hevc", "av1", "mpeg4", "vp9", "mjpeg"},
 		// Opus and FLAC in MP4 are valid but poorly supported by players,
-		// so they are re-encoded rather than copied.
+		// so they are re-encoded rather than copied; see poorlySupported.
 		audio:     []string{"aac", "mp3", "ac3", "eac3", "alac", "mp2"},
 		subtitles: []string{"mov_text"}, textSub: "mov_text", faststart: true},
 	".mov": {name: "mov",
@@ -525,11 +525,21 @@ func isBitmapSubtitle(codec string) bool {
 	return false
 }
 
+// poorlySupported lists codecs a container does accept but that players
+// handle badly, so they are left out of its copy lists above. The plan
+// says as much instead of claiming the container refuses them.
+var poorlySupported = map[string][]string{
+	"mp4": {"opus", "flac"},
+}
+
 func encodeReason(codec string, c *containerInfo, scaled bool) string {
 	switch {
 	case scaled:
 		return "scaled down"
 	case !contains(c.video, codec) && !contains(c.audio, codec):
+		if contains(poorlySupported[c.name], codec) {
+			return codec + " poorly supported in " + c.name
+		}
 		return codec + " not accepted by " + c.name
 	default:
 		return "copy not enabled"

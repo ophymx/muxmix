@@ -55,7 +55,7 @@ func TestPlanMatroskaToMP4(t *testing.T) {
 	if len(plan.Streams) != 5 || plan.Streams[4].Type != "attachment" || plan.Streams[4].Action != Drop {
 		t.Errorf("streams = %+v", plan.Streams)
 	}
-	if s := plan.String(); !strings.Contains(s, "2 audio opus [deu]: encode → aac (opus not accepted by mp4)") {
+	if s := plan.String(); !strings.Contains(s, "2 audio opus [deu]: encode → aac (opus poorly supported in mp4)") {
 		t.Errorf("String():\n%s", s)
 	}
 }
