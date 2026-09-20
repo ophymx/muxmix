@@ -3,6 +3,7 @@ package hwaccel
 import (
 	"context"
 	"errors"
+	"maps"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -386,8 +387,20 @@ func (fakeBackend) VideoCodec(codec string) (string, error) {
 	return codecTable{"h264": "h264_topaz"}.encoder(codec)
 }
 
+// unregisterForTest drops a kind and the aliases pointing at it, so a test
+// that registers a backend leaves the global registry as it found it and
+// can run twice (go test -count=2).
+func unregisterForTest(kind Kind) {
+	registry.mu.Lock()
+	defer registry.mu.Unlock()
+	delete(registry.backends, kind)
+	registry.order = slices.DeleteFunc(registry.order, func(k Kind) bool { return k == kind })
+	maps.DeleteFunc(registry.aliases, func(_ string, k Kind) bool { return k == kind })
+}
+
 func TestRegisterBackend(t *testing.T) {
 	Register(fakeBackend{})
+	t.Cleanup(func() { unregisterForTest("topaz") })
 	RegisterAlias("tpz", "topaz")
 	if NormalizeKind("TPZ") != "topaz" || NormalizeKind("topaz") != "topaz" || NormalizeKind("unknown") != None || NormalizeKind("auto") != None {
 		t.Error("NormalizeKind")
