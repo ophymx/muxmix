@@ -2,6 +2,7 @@ package filtergraph
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -61,9 +62,16 @@ func TestArgList(t *testing.T) {
 			expected: "1280:h=-2",
 		},
 		{
-			name:     "value carrying an equals sign is quoted",
+			name:     "value carrying an equals sign is quoted and escaped",
 			args:     argList{{Key: "force_style", Value: "FontName=Arial,FontSize=24"}},
-			expected: "force_style='FontName=Arial,FontSize=24'",
+			expected: `force_style='FontName\=Arial,FontSize\=24'`,
+		},
+		{
+			// The bug this escaping exists for: unescaped, ffmpeg reads
+			// "/tmp/a" as an option name and never opens the file.
+			name:     "positional carrying an equals sign is escaped",
+			args:     positionalArgs([]string{"/tmp/a=b.srt"}),
+			expected: `'/tmp/a\=b.srt'`,
 		},
 		{
 			name:     "raw args pass through unescaped",
@@ -97,8 +105,9 @@ func TestArgList(t *testing.T) {
 // The encodings below are the ones a real ffmpeg was observed to deliver
 // unchanged; TestLiveFilterArgumentEscaping re-checks them against the
 // binary. The graph parser strips the quotes and the argument parser eats
-// the backslashes, so ":" and "\" need both, and "'" cannot sit inside the
-// quotes at all.
+// the backslashes, so ":", "=" and "\" need both, "'" cannot sit inside
+// the quotes at all, and whitespace needs the backslash because the
+// argument parser trims a token the quotes are already gone from.
 func TestEscapeFilterArg(t *testing.T) {
 	for _, tc := range []struct {
 		value, expected string
@@ -107,16 +116,22 @@ func TestEscapeFilterArg(t *testing.T) {
 		{"1280", "1280"},
 		{"-2", "-2"},
 		{"a,b", `'a,b'`},
-		{"a b", `'a b'`},
-		{"a=b", `'a=b'`},
+		{"a b", `'a\ b'`},
+		{" leading", `'\ leading'`},
+		{"trailing ", `'trailing\ '`},
+		{" ", `'\ '`},
+		{"a\tb", `'a\` + "\t" + `b'`},
+		{"a=b", `'a\=b'`},
 		{"a:b", `'a\:b'`},
 		{`a\b`, `'a\\b'`},
 		{"a'b", `'a'\\\''b'`},
-		{`it's a:b\c`, `'it'\\\''s a\:b\\c'`},
+		{`it's a:b\c`, `'it'\\\''s\ a\:b\\c'`},
 		{"eq(pict_type,I)", `'eq(pict_type,I)'`},
 		{"a;b", `'a;b'`},
 		{"a[b]c", `'a[b]c'`},
-		{"FontName=Arial,FontSize=24", `'FontName=Arial,FontSize=24'`},
+		{"FontName=Arial,FontSize=24", `'FontName\=Arial,FontSize\=24'`},
+		{"/tmp/a=b.srt", `'/tmp/a\=b.srt'`},
+		{"a=b:c=d", `'a\=b\:c\=d'`},
 	} {
 		if got := escapeFilterArg(tc.value); got != tc.expected {
 			t.Errorf("escapeFilterArg(%q) = %s, want %s", tc.value, got, tc.expected)
@@ -148,6 +163,19 @@ func TestArgListValidate(t *testing.T) {
 		{name: "an empty value is still a named argument", args: argList{{Key: "w", Value: "1280"}, {Key: "flags"}}},
 		{name: "positional after an empty-valued named argument", args: append(argList{{Key: "flags"}}, arg{Value: "1280"}), wantErr: true},
 		{name: "raw args are opaque, not a named argument", args: append(argList{{Value: "w=1280", raw: true}}, arg{Value: "720"})},
+
+		// A key is the one thing escaping cannot carry: ffmpeg reads an
+		// option name with no escaping of its own, so a key holding a
+		// character that would have to be quoted cannot be delivered and
+		// is rejected rather than rendered into a mis-parse.
+		{name: "equals in key", args: argList{{Key: "a=b", Value: "1"}}, wantErr: true},
+		{name: "colon in key", args: argList{{Key: "a:b", Value: "1"}}, wantErr: true},
+		{name: "space in key", args: argList{{Key: "a b", Value: "1"}}, wantErr: true},
+		{name: "comma in key", args: argList{{Key: "a,b", Value: "1"}}, wantErr: true},
+		{name: "backslash in key", args: argList{{Key: `a\b`, Value: "1"}}, wantErr: true},
+		{name: "quote in key", args: argList{{Key: "a'b", Value: "1"}}, wantErr: true},
+		{name: "a raw arg's key is not ours to check", args: argList{{Key: "a=b", Value: "1", raw: true}}},
+		{name: "the same characters in a value are fine", args: argList{{Key: "k", Value: `a=b:c\d e'f`}}},
 	}
 
 	for _, tt := range tests {
@@ -215,6 +243,11 @@ func TestFilterArgBuildersCompose(t *testing.T) {
 			expected: "crop=iw/2:ih/2:exact=1",
 		},
 		{
+			name:     "arguments keep appending after a caller's own",
+			filter:   NewFilter("crop").WithArgs(stubArgs("iw/2:ih/2")).WithArg("exact", "1").WithArg("keep_aspect", "1"),
+			expected: "crop=iw/2:ih/2:exact=1:keep_aspect=1",
+		},
+		{
 			name:     "WithNamedArgs replaces, WithArg appends",
 			filter:   NewFilter("scale").WithNamedArgs(map[string]string{"w": "1280"}).WithArg("h", "-2"),
 			expected: "scale=w=1280:h=-2",
@@ -261,6 +294,110 @@ type stubArgs string
 func (s stubArgs) String() string  { return string(s) }
 func (s stubArgs) Validate() error { return nil }
 
+// strictArgs is a caller's own FilterArguments that rejects what it holds,
+// standing in for one carrying a rule this package knows nothing about.
+type strictArgs string
+
+func (s strictArgs) String() string  { return string(s) }
+func (s strictArgs) Validate() error { return fmt.Errorf("strictArgs rejects %q", string(s)) }
+
+// Appending to a caller's own FilterArguments keeps its Validate. Its
+// rendering is all that survives into JSON, but a rule the caller attached
+// to its arguments must not stop applying just because a WithArg followed.
+func TestFilterCustomArgsKeepTheirValidate(t *testing.T) {
+	f := NewFilter("crop").WithArgs(strictArgs("iw/2:ih/2")).WithArg("exact", "1")
+
+	err := f.Validate()
+	if err == nil {
+		t.Fatal("Validate() = nil, want the custom arguments' own error")
+	}
+	if !strings.Contains(err.Error(), "strictArgs") {
+		t.Errorf("Validate() = %q, want the custom arguments' error", err)
+	}
+	if got, want := f.String(), "crop=iw/2:ih/2:exact=1"; got != want {
+		t.Errorf("String() = %q, want %q: the rendering is unchanged", got, want)
+	}
+	// The appended arguments are still checked on their own terms.
+	if err := NewFilter("crop").WithArgs(stubArgs("iw/2")).WithArg("exact", "1").WithPositionalArgs("2").Validate(); err == nil {
+		t.Error("Validate() = nil, want an error for a positional argument after a named one")
+	}
+}
+
+// A document may spell out an absent "args" as null, which decoded without
+// complaint before the arguments became one ordered list. It is a filter
+// with no arguments, not a decode error.
+func TestFilterArgsJSONNull(t *testing.T) {
+	for _, doc := range []string{
+		`{"input_labels":[],"name":"null","args":null,"output_labels":[]}`,
+		`{"input_labels":[],"name":"null","args":{},"output_labels":[]}`,
+	} {
+		var f Filter
+		if err := json.Unmarshal([]byte(doc), &f); err != nil {
+			t.Fatalf("Unmarshal(%s) = %v", doc, err)
+		}
+		if f.Args != nil {
+			t.Errorf("Args = %#v, want none, from %s", f.Args, doc)
+		}
+		if got, want := f.String(), "null"; got != want {
+			t.Errorf("String() = %q, want %q, from %s", got, want, doc)
+		}
+		data, err := json.Marshal(&f)
+		if err != nil {
+			t.Fatalf("Marshal: %v", err)
+		}
+		if strings.Contains(string(data), "args") {
+			t.Errorf("marshalled as %s, want no args member", data)
+		}
+	}
+
+	// On argList itself, null is the no-op encoding/json expects of an
+	// UnmarshalJSON it calls for a null member.
+	args := argList{{Key: "w", Value: "1280"}}
+	if err := json.Unmarshal([]byte("null"), &args); err != nil {
+		t.Fatalf("Unmarshal null: %v", err)
+	}
+	if got, want := args.String(), "w=1280"; got != want {
+		t.Errorf("null overwrote the arguments: %q, want %q", got, want)
+	}
+}
+
+// A whole filter may be null too — a member of a document's array that a
+// producer left out, say. That is a no-op, the same as for any other
+// struct, and not the nil dereference it used to be: Filter.UnmarshalJSON
+// handed encoding/json the address of its own pointer, which a null set to
+// nil under it.
+func TestFilterJSONNull(t *testing.T) {
+	f := Filter{Name: "scale"}
+	if err := json.Unmarshal([]byte("null"), &f); err != nil {
+		t.Fatalf("Unmarshal null: %v", err)
+	}
+	if f.Name != "scale" {
+		t.Errorf("null overwrote the filter: %#v", f)
+	}
+
+	var zero Filter
+	if err := json.Unmarshal([]byte("null"), &zero); err != nil {
+		t.Fatalf("Unmarshal null into a zero Filter: %v", err)
+	}
+
+	// And nested, which is how a null filter actually arrives.
+	var chain FilterChain
+	if err := json.Unmarshal([]byte(`{"filters":[null]}`), &chain); err != nil {
+		t.Fatalf("Unmarshal a null filter in a chain: %v", err)
+	}
+}
+
+// An argument name is the one thing ffmpeg gives no way to escape, so a
+// document carrying one that could not be delivered is rejected at the
+// decoder rather than rendered into a mis-parse. See [argList.Validate].
+func TestFilterArgsJSONEmptyKey(t *testing.T) {
+	const doc = `{"input_labels":[],"name":"scale","args":{"":"1280"},"output_labels":[]}`
+	var f Filter
+	if err := json.Unmarshal([]byte(doc), &f); err == nil {
+		t.Errorf("Unmarshal(%s) = nil, want an error for an empty argument name", doc)
+	}
+}
+
 func TestFilterArgsJSONRoundTrip(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -286,6 +423,20 @@ func TestFilterArgsJSONRoundTrip(t *testing.T) {
 			name:     "raw is the one rendered string",
 			filter:   NewFilter("pad").WithPositionalArgs("1280").WithRawArgs("color=black"),
 			wantArgs: `"1280:color=black"`,
+		},
+		{
+			// An object cannot hold a key twice, and a decoder that kept
+			// only the last would silently drop w=100. ffmpeg takes the
+			// last too, so the arguments are kept in order rather than
+			// collapsed here.
+			name:     "a repeated key is an array of one-key objects",
+			filter:   NewFilter("scale").WithArg("w", "100").WithArg("w", "200"),
+			wantArgs: `[{"w":"100"},{"w":"200"}]`,
+		},
+		{
+			name:     "a repeated key among positionals",
+			filter:   NewFilter("pad").WithPositionalArgs("1280").WithArg("color", "red").WithArg("color", "black"),
+			wantArgs: `["1280",{"color":"red"},{"color":"black"}]`,
 		},
 		{
 			name:     "a value needing quotes keeps its unescaped form",

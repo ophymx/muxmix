@@ -88,6 +88,43 @@ func positionalArgs(values []string) argList {
 // escape correctly and should be preferred where they fit.
 func Raw(s string) FilterArguments { return argList{{Value: s, raw: true}} }
 
+// joinedArgs is a [FilterArguments] implementation this package does not
+// own with arguments appended after it. Rendering the first one and
+// keeping the string would be enough for the rendering, but it would drop
+// the implementation's Validate, and quietly not checking what a caller
+// asked to have checked is worse than either alternative.
+type joinedArgs struct {
+	first FilterArguments
+	rest  argList
+}
+
+var _ FilterArguments = joinedArgs{}
+
+// String renders the first arguments and then the appended ones, joined by
+// ":", with an empty rendering on either side contributing no empty slot.
+func (j joinedArgs) String() string {
+	first, rest := j.first.String(), j.rest.String()
+	switch {
+	case first == "":
+		return rest
+	case rest == "":
+		return first
+	default:
+		return first + ":" + rest
+	}
+}
+
+// Validate reports the first arguments' own error before looking at the
+// appended ones, which are checked as though the first were not there: what
+// they render is as opaque here as a raw argument's string, so whether the
+// last of them is named is unknowable.
+func (j joinedArgs) Validate() error {
+	if err := j.first.Validate(); err != nil {
+		return err
+	}
+	return j.rest.Validate()
+}
+
 // String renders one argument, escaping key and value separately so that a
 // value containing "=" or "," is quoted while the "key=" introducing it is
 // not.
@@ -115,12 +152,24 @@ func (a argList) String() string {
 	return strings.Join(parts, ":")
 }
 
-// Validate implements [FilterArguments]. The only thing it can reject is a
-// positional argument after a named one, which ffmpeg cannot parse; no
-// character is off limits, because escapeFilterArg carries every one of
-// them past both parsers. Raw arguments are the caller's to get right: they
-// pass unchecked, and an argument after one is checked as though the raw
-// string were not there, since what it ends with is unknowable here.
+// Validate implements [FilterArguments]. It rejects the two things ffmpeg
+// cannot be made to read: a positional argument after a named one, and a
+// key holding a character escapeFilterArg would have to quote.
+//
+// Values are unrestricted — escapeFilterArg carries every character past
+// both parsers — but a key is not a token ffmpeg lets you escape. Quoting
+// one does not help: the graph parser eats the quotes, and the option
+// parser then reads what is left with no escaping of its own, so
+// scale='z\:z'=50 reaches it as z\:z=50 and it answers "No option name
+// near". Escaping is worse than useless for "=", which stops the parser
+// splitting off a name at all and turns the whole argument positional. A
+// key is therefore deliverable only when it needs no quoting, which every
+// real option name does, being [a-zA-Z0-9_]. Rejecting the rest here turns
+// a silent mis-assignment into an error.
+//
+// Raw arguments are the caller's to get right: they pass unchecked, and an
+// argument after one is checked as though the raw string were not there,
+// since what it ends with is unknowable here.
 func (a argList) Validate() error {
 	var named string
 	for _, one := range a {
@@ -128,6 +177,9 @@ func (a argList) Validate() error {
 			continue
 		}
 		if one.Key != "" {
+			if needsQuoting(one.Key) {
+				return fmt.Errorf("argument key %q: ffmpeg reads an option name with no escaping of its own, so a key cannot hold any of %s or whitespace", one.Key, `[]=;,:'\`)
+			}
 			named = one.Key
 			continue
 		}
@@ -138,23 +190,36 @@ func (a argList) Validate() error {
 	return nil
 }
 
-// MarshalJSON writes an object while every argument is named, an array of
-// strings while every argument is positional, and otherwise an array in
-// argument order with each named argument as a one-key object. Arguments
-// that hold a raw string are written as the one rendered string, which
-// round-trips the rendering exactly but comes back as a single raw
-// argument rather than as the parts it was built from.
+// MarshalJSON writes an object while every argument is named and no key
+// repeats, an array of strings while every argument is positional, and
+// otherwise an array in argument order with each named argument as a
+// one-key object. Arguments that hold a raw string are written as the one
+// rendered string, which round-trips the rendering exactly but comes back
+// as a single raw argument rather than as the parts it was built from.
+//
+// A repeated key takes the array form because an object cannot hold it.
+// Repeating a member name is legal JSON and this package's own decoder
+// keeps both, but most decoders keep only the last, so writing
+// {"k":"1","k":"2"} would let a round trip through anything else drop
+// k=1 without a word. ffmpeg itself takes the last of a repeated option,
+// so the arguments are worth keeping in order rather than collapsing.
 func (a argList) MarshalJSON() ([]byte, error) {
-	positional := 0
+	positional, repeated := 0, false
+	seen := make(map[string]bool, len(a))
 	for _, one := range a {
 		if one.raw {
 			return json.Marshal(a.String())
 		}
 		if one.Key == "" {
 			positional++
+			continue
 		}
+		if seen[one.Key] {
+			repeated = true
+		}
+		seen[one.Key] = true
 	}
-	if positional == 0 {
+	if positional == 0 && !repeated {
 		return a.marshalObject(), nil
 	}
 	if positional == len(a) {
@@ -203,7 +268,8 @@ func (a argList) marshalObject() []byte {
 // UnmarshalJSON reads any shape MarshalJSON writes, keeping the arguments
 // in document order: an object of named arguments, an array whose strings
 // are positional and whose objects are named, or one string taken as a raw
-// argument.
+// argument. A null leaves the arguments as they were, so a document that
+// spells out an absent "args" still decodes.
 func (a *argList) UnmarshalJSON(data []byte) error {
 	dec := json.NewDecoder(bytes.NewReader(data))
 	tok, err := dec.Token()
@@ -212,6 +278,11 @@ func (a *argList) UnmarshalJSON(data []byte) error {
 	}
 	var out argList
 	switch tok {
+	case nil:
+		// A JSON null leaves the arguments alone, the no-op every other
+		// type gets from encoding/json, which calls UnmarshalJSON for
+		// null rather than skipping the member.
+		return nil
 	case json.Delim('{'):
 		if err := out.decodeObject(dec); err != nil {
 			return err
@@ -235,7 +306,10 @@ func (a *argList) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// decodeObject reads the members of an object already opened on dec.
+// decodeObject reads the members of an object already opened on dec. An
+// empty member name is rejected rather than decoded: an argument with no
+// key is a positional one here, so "" would quietly turn a named argument
+// into a positional one and change what the filter reads.
 func (a *argList) decodeObject(dec *json.Decoder) error {
 	for dec.More() {
 		keyTok, err := dec.Token()
@@ -246,6 +320,9 @@ func (a *argList) decodeObject(dec *json.Decoder) error {
 		var value string
 		if err := dec.Decode(&value); err != nil {
 			return err
+		}
+		if key == "" {
+			return fmt.Errorf("filtergraph: filter argument name is empty: write a positional argument as a string in an array, not as a \"\" member")
 		}
 		*a = append(*a, arg{Key: key, Value: value})
 	}
@@ -286,12 +363,28 @@ func formatNumber(f float64) string { return strconv.FormatFloat(f, 'f', -1, 64)
 // A filter description is unescaped twice. The graph parser goes first: it
 // splits on "," ";" "[" "]", consumes backslashes outside quotes and strips
 // a quoted section's quotes while passing its contents through untouched.
-// The argument parser then splits what is left on ":" and consumes the
-// backslashes that survived. So quoting carries the graph separators and
-// whitespace through on its own, while ":" and "\" have to be escaped
-// inside the quotes as well, and a literal "'" cannot appear inside them at
-// all — it is written by closing the quotes, escaping it for both parsers,
-// and reopening.
+// The argument parser then splits what is left on ":" and on the "=" that
+// introduces a value, and consumes the backslashes that survived. So
+// quoting carries the graph separators through on its own, while ":", "="
+// and "\\" have to be escaped inside the quotes as well, and a literal "'"
+// cannot appear inside them at all — it is written by closing the quotes,
+// escaping it for both parsers, and reopening.
+//
+// "=" matters only to a positional argument, which the argument parser
+// reads as a name when it finds one: movie='/tmp/a=b.srt' looks like the
+// option "/tmp/a" and fails, and only movie='/tmp/a\\=b.srt' reaches the
+// filter whole. A named argument's value is already safe, since the parser
+// gives up the name at the first "=" and takes the rest verbatim, but
+// escaping there too costs nothing and keeps one rule instead of two.
+//
+// Whitespace needs the backslash too, although the quotes look like
+// enough: they are gone by the time the argument parser reads the token,
+// and av_get_token then trims the leading and trailing whitespace of
+// whatever a backslash or a quote of its own has not claimed. So
+// format=pix_fmts=' zz' reaches the filter as "zz" and only
+// format=pix_fmts='\ zz' as " zz". Escaping every whitespace character and
+// not just the ones at the edges keeps that distinction out of here;
+// ffmpeg reads the two the same.
 func escapeFilterArg(s string) string {
 	if !needsQuoting(s) {
 		return s
@@ -304,8 +397,9 @@ func escapeFilterArg(s string) string {
 			b.WriteString(`'\\\''`)
 		case '\\':
 			b.WriteString(`\\`)
-		case ':':
-			b.WriteString(`\:`)
+		case ':', '=', ' ', '\t', '\n', '\f', '\r':
+			b.WriteByte('\\')
+			b.WriteRune(r)
 		default:
 			b.WriteRune(r)
 		}

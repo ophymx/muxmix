@@ -46,11 +46,16 @@ func (f *Filter) WithNamedArgs(args map[string]string) *Filter {
 	return f
 }
 
-// WithArg appends one key=value argument. Both the key and the value are
-// escaped as ffmpeg needs. An empty value renders as key= and sets the
-// option to the empty string, which options that take a string accept and
-// options that take a number or an expression reject by name. ffmpeg has no
-// bare-flag form: to pass a value with no key, use WithPositionalArgs.
+// WithArg appends one key=value argument. The value is escaped as ffmpeg
+// needs and may hold any character; the key may not, because ffmpeg reads
+// an option name with no escaping of its own, so a key needing quotes fails
+// Validate. See [argList.Validate].
+//
+// An empty value renders as key= and sets the option to the empty string,
+// which options that take a string accept and options that take a number or
+// an expression reject by name. An empty key makes the argument positional,
+// the same as WithPositionalArgs, since that is what an argument with no key
+// is here; ffmpeg has no bare-flag form for anything else.
 func (f *Filter) WithArg(key, value string) *Filter {
 	return f.appendArgs(argList{{Key: key, Value: value}})
 }
@@ -78,16 +83,20 @@ func (f *Filter) WithRawArgs(args string) *Filter {
 }
 
 // appendArgs adds to the filter's arguments. Arguments already set through
-// a FilterArguments implementation this package does not own are kept as
-// their rendering, so that nothing a caller passed is dropped.
+// a FilterArguments implementation this package does not own are kept
+// whole, rendering and Validate both, so that nothing a caller passed is
+// dropped and nothing it rejects starts passing. See [joinedArgs].
 func (f *Filter) appendArgs(add argList) *Filter {
 	switch existing := f.Args.(type) {
 	case nil:
 		f.Args = add
 	case argList:
 		f.Args = append(existing, add...)
+	case joinedArgs:
+		existing.rest = append(existing.rest, add...)
+		f.Args = existing
 	default:
-		f.Args = append(argList{{Value: existing.String(), raw: true}}, add...)
+		f.Args = joinedArgs{first: existing, rest: add}
 	}
 	return f
 }
@@ -206,7 +215,11 @@ func (f *Filter) UnmarshalJSON(data []byte) error {
 		Alias: (*Alias)(f),
 	}
 
-	if err := json.Unmarshal(data, &aux); err != nil {
+	// aux, not &aux: encoding/json sets a pointer it is given the address
+	// of to nil for a JSON null, and every read below would then be a nil
+	// dereference. Handed the pointer itself, a null is the no-op every
+	// other struct gets, leaving the filter as it was.
+	if err := json.Unmarshal(data, aux); err != nil {
 		return err
 	}
 
@@ -215,7 +228,11 @@ func (f *Filter) UnmarshalJSON(data []byte) error {
 		if err := json.Unmarshal(aux.Args, &args); err != nil {
 			return fmt.Errorf("failed to unmarshal args: %v", err)
 		}
-		f.Args = args
+		// A null or empty "args" is a filter without arguments rather
+		// than one carrying an empty set of them.
+		if args != nil {
+			f.Args = args
+		}
 	}
 
 	return nil
