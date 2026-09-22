@@ -1,0 +1,15 @@
+{
+    "programs": [
+
+    ],
+    "stream_groups": [
+
+    ],
+    "streams": [
+        { "index": 0, "codec_name": "vp9", "codec_type": "video",
+            "tags": {  } },
+        { "index": 1, "codec_name": "opus", "codec_type": "audio",
+            "tags": {  } }
+    ],
+    "format": { "filename": "ffprobe/testdata/media/vp9.webm", "duration": "1.008000" }
+}

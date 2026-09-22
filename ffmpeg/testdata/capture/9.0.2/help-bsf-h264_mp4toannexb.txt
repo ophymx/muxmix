@@ -1,0 +1,4 @@
+Bit stream filter h264_mp4toannexb
+    Supported codecs: h264
+
+Exiting with exit code 0
