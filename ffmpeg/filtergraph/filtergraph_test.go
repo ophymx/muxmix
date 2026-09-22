@@ -154,8 +154,8 @@ func TestArgListValidate(t *testing.T) {
 		{name: "raw args are the caller's to get right", args: argList{{Value: "a;b", raw: true}}},
 
 		// ffmpeg fills a filter's options positionally only up to the
-		// first key=value, then rejects any further bare argument with
-		// "No option name near '...'".
+		// first key=value. A further bare argument is "No option name
+		// near '...'" from 7.1 on, and lands on the wrong option before.
 		{name: "positional then named", args: append(positionalArgs([]string{"1280", "720"}), arg{Key: "color", Value: "black"})},
 		{name: "positional short of the last slot, then named", args: append(positionalArgs([]string{"1280"}), arg{Key: "h", Value: "-2"})},
 		{name: "named then positional", args: append(argList{{Key: "color", Value: "black"}}, arg{Value: "1280"}), wantErr: true},
@@ -1019,5 +1019,28 @@ func BenchmarkFilterGraphString(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		_ = g.String()
+	}
+}
+
+func BenchmarkFilterGraphValidate(b *testing.B) {
+	// Setup a complex graph once
+	g := NewFilterGraph()
+
+	for i := range 10 {
+		chain := g.NewChain()
+		chain.Input(fmt.Sprintf("%d:v", i)).
+			Scale(1920, 1080).
+			FPS(30.0).
+			Format("yuv420p").
+			Crop(100, 100, 10, 10).
+			Output(fmt.Sprintf("out%d", i))
+	}
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		if err := g.Validate(); err != nil {
+			b.Fatal(err)
+		}
 	}
 }

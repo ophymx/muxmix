@@ -111,13 +111,22 @@ func (f *Filter) Output(labels ...string) *Filter {
 	return f
 }
 
+// A filter name and an @instance are both [a-zA-Z][a-zA-Z0-9_]*. An output
+// label is a name ffmpeg matches by string; an input label is either that
+// or a stream specifier, which may carry "?" (optional), "#"/"0x" (stream
+// id) and metadata matches such as "0:m:language:eng".
+var (
+	namePattern      = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_]*$`)
+	labelPattern     = regexp.MustCompile(`^[a-zA-Z0-9_:]+$`)
+	specifierPattern = regexp.MustCompile(`^[0-9][a-zA-Z0-9_:?#.\-]*$`)
+)
+
 // Validate checks if the filter is valid
 func (f *Filter) Validate() error {
 	if f.Name == "" {
 		return fmt.Errorf("filter name cannot be empty")
 	}
 
-	namePattern := regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_]*$`)
 	if !namePattern.MatchString(f.Name) {
 		return fmt.Errorf("invalid filter name: %s", f.Name)
 	}
@@ -126,10 +135,6 @@ func (f *Filter) Validate() error {
 		return fmt.Errorf("invalid instance name: %s", f.Instance)
 	}
 
-	labelPattern := regexp.MustCompile(`^[a-zA-Z0-9_:]+$`)
-	// Input stream specifiers may carry "?" (optional), "#"/"0x" (stream id)
-	// and metadata matches such as "0:m:language:eng".
-	specifierPattern := regexp.MustCompile(`^[0-9][a-zA-Z0-9_:?#.\-]*$`)
 	for _, label := range f.InputLabels {
 		if isStreamSpecifier(label) {
 			if !specifierPattern.MatchString(label) {
@@ -159,12 +164,12 @@ func (f *Filter) String() string {
 	var sb strings.Builder
 
 	for _, label := range f.InputLabels {
-		sb.WriteString(fmt.Sprintf("[%s]", label))
+		sb.WriteString("[" + label + "]")
 	}
 
 	sb.WriteString(f.Name)
 	if f.Instance != "" {
-		sb.WriteString(fmt.Sprintf("@%s", f.Instance))
+		sb.WriteString("@" + f.Instance)
 	}
 
 	if f.Args != nil {
@@ -176,7 +181,7 @@ func (f *Filter) String() string {
 	}
 
 	for _, label := range f.OutputLabels {
-		sb.WriteString(fmt.Sprintf("[%s]", label))
+		sb.WriteString("[" + label + "]")
 	}
 
 	return sb.String()
