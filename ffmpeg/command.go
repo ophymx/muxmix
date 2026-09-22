@@ -10,7 +10,7 @@ import (
 
 // Command is an ffmpeg invocation: global options, inputs each with their
 // own options, and outputs each with their own options and stream maps.
-// Args renders it in the order ffmpeg requires.
+// Args renders it as globals, then each input, then each output.
 //
 //	cmd := ffmpeg.NewCommand().
 //		Input("in.mkv", ffmpeg.Seek(10*time.Second)).
@@ -25,6 +25,15 @@ import (
 // encoding/json with the same Args on the far side, so one process can
 // build a command and another run it. Option order matters to ffmpeg, and
 // survives the trip because Options is a list rather than a map.
+//
+// That render is a canonical order, not the only valid one. ffmpeg accepts
+// a global option anywhere on the line, and other tools commonly emit
+// globals after -i, so a command line captured elsewhere may be
+// semantically identical to this one and still differ position by
+// position. Anyone replaying, diffing or golden-file testing against
+// captured output should normalise at the comparison rather than expect
+// Args to reproduce another tool's argument order; declaring a global as an
+// output option to force its position misrepresents what the option is.
 type Command struct {
 	Global  Options   `json:"global,omitempty"`
 	Inputs  []*Input  `json:"inputs,omitempty"`
