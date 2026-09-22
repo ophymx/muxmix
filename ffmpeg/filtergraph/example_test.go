@@ -27,3 +27,22 @@ func ExampleNewFilter() {
 	fmt.Println(f)
 	// Output: unsharp=lx=5:la=1.2
 }
+
+func ExampleFilter_WithPositionalArgs() {
+	// Positional and named arguments in one filter, in the order ffmpeg's
+	// documentation writes them.
+	f := filtergraph.NewFilter("pad").
+		WithPositionalArgs("1280", "720", "-1", "-1").
+		WithArg("color", "black")
+	fmt.Println(f)
+	// Output: pad=1280:720:-1:-1:color=black
+}
+
+func ExampleFilter_WithRawArgs() {
+	// An argument string read from a config file or preset, already
+	// escaped, attached as it stands.
+	preset := "f=subs.srt:force_style='FontName=Arial,FontSize=24'"
+	f := filtergraph.NewFilter("subtitles").WithRawArgs(preset)
+	fmt.Println(f)
+	// Output: subtitles=f=subs.srt:force_style='FontName=Arial,FontSize=24'
+}

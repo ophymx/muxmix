@@ -2,102 +2,471 @@ package filtergraph
 
 import (
 	"encoding/json"
-	"slices"
+	"fmt"
 	"strings"
 	"testing"
 )
 
-func TestNamedArgs(t *testing.T) {
+func TestArgList(t *testing.T) {
 	tests := []struct {
 		name     string
-		args     namedArgs
+		args     argList
 		expected string
 	}{
 		{
 			name:     "empty args",
-			args:     namedArgs{},
+			args:     argList{},
 			expected: "",
 		},
 		{
 			name:     "single key-value",
-			args:     namedArgs{{"width", "1920"}},
+			args:     argList{{Key: "width", Value: "1920"}},
 			expected: "width=1920",
 		},
 		{
-			name:     "multiple key-values",
-			args:     namedArgs{{"width", "1920"}, {"height", "1080"}},
+			name:     "multiple key-values render in order added",
+			args:     argList{{Key: "width", Value: "1920"}, {Key: "height", Value: "1080"}},
 			expected: "width=1920:height=1080",
 		},
 		{
-			name:     "flag argument",
-			args:     namedArgs{{"enable", ""}},
-			expected: "enable",
+			// Not a bare "enable": ffmpeg would read that as a positional
+			// value. An empty value sets the option to the empty string.
+			name:     "empty value keeps its key",
+			args:     argList{{Key: "flags"}},
+			expected: "flags=",
 		},
 		{
-			name:     "mixed flag and values",
-			args:     namedArgs{{"width", "1920"}, {"enable", ""}, {"height", "1080"}},
-			expected: "width=1920:enable:height=1080",
+			name:     "empty value among others",
+			args:     argList{{Key: "w", Value: "1280"}, {Key: "flags"}, {Key: "h", Value: "-2"}},
+			expected: "w=1280:flags=:h=-2",
+		},
+		{
+			name:     "single positional",
+			args:     argList{{Value: "yuv420p"}},
+			expected: "yuv420p",
+		},
+		{
+			name:     "multiple positionals",
+			args:     positionalArgs([]string{"1920", "1080", "0", "0"}),
+			expected: "1920:1080:0:0",
+		},
+		{
+			name:     "positional then named",
+			args:     append(positionalArgs([]string{"1280", "720", "-1", "-1"}), arg{Key: "color", Value: "black"}),
+			expected: "1280:720:-1:-1:color=black",
+		},
+		{
+			// Stopping short of the last positional slot is fine.
+			name:     "some positionals then named",
+			args:     append(positionalArgs([]string{"1280"}), arg{Key: "h", Value: "-2"}),
+			expected: "1280:h=-2",
+		},
+		{
+			name:     "value carrying an equals sign is quoted and escaped",
+			args:     argList{{Key: "force_style", Value: "FontName=Arial,FontSize=24"}},
+			expected: `force_style='FontName\=Arial,FontSize\=24'`,
+		},
+		{
+			// The bug this escaping exists for: unescaped, ffmpeg reads
+			// "/tmp/a" as an option name and never opens the file.
+			name:     "positional carrying an equals sign is escaped",
+			args:     positionalArgs([]string{"/tmp/a=b.srt"}),
+			expected: `'/tmp/a\=b.srt'`,
+		},
+		{
+			name:     "raw args pass through unescaped",
+			args:     argList{{Value: "color=black,foo=bar", raw: true}},
+			expected: "color=black,foo=bar",
+		},
+		{
+			name:     "empty raw args add no slot",
+			args:     append(positionalArgs([]string{"1280"}), arg{raw: true}),
+			expected: "1280",
+		},
+		{
+			name:     "raw args after positional",
+			args:     append(positionalArgs([]string{"1280", "720"}), arg{Value: "color=black", raw: true}),
+			expected: "1280:720:color=black",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := tt.args.String()
-			// Since map iteration order is not guaranteed, we need to check that all parts are present
-			if tt.expected == "" {
-				if result != "" {
-					t.Errorf("Expected empty string, got %s", result)
-				}
-				return
+			if got := tt.args.String(); got != tt.expected {
+				t.Errorf("String() = %q, want %q", got, tt.expected)
 			}
-
-			parts := strings.Split(result, ":")
-			expectedParts := strings.Split(tt.expected, ":")
-
-			if len(parts) != len(expectedParts) {
-				t.Errorf("Expected %d parts, got %d. Result: %s", len(expectedParts), len(parts), result)
-				return
-			}
-
-			// Check that all expected parts are present (order may vary)
-			for _, expected := range expectedParts {
-				found := slices.Contains(parts, expected)
-				if !found {
-					t.Errorf("Expected part %q not found in result %q", expected, result)
-				}
+			if err := tt.args.Validate(); err != nil {
+				t.Errorf("Validate() = %v, want nil", err)
 			}
 		})
 	}
 }
 
-func TestPositionalArgs(t *testing.T) {
+// The encodings below are the ones a real ffmpeg was observed to deliver
+// unchanged; TestLiveFilterArgumentEscaping re-checks them against the
+// binary. The graph parser strips the quotes and the argument parser eats
+// the backslashes, so ":", "=" and "\" need both, "'" cannot sit inside
+// the quotes at all, and whitespace needs the backslash because the
+// argument parser trims a token the quotes are already gone from.
+func TestEscapeFilterArg(t *testing.T) {
+	for _, tc := range []struct {
+		value, expected string
+	}{
+		{"plain", "plain"},
+		{"1280", "1280"},
+		{"-2", "-2"},
+		{"a,b", `'a,b'`},
+		{"a b", `'a\ b'`},
+		{" leading", `'\ leading'`},
+		{"trailing ", `'trailing\ '`},
+		{" ", `'\ '`},
+		{"a\tb", `'a\` + "\t" + `b'`},
+		{"a=b", `'a\=b'`},
+		{"a:b", `'a\:b'`},
+		{`a\b`, `'a\\b'`},
+		{"a'b", `'a'\\\''b'`},
+		{`it's a:b\c`, `'it'\\\''s\ a\:b\\c'`},
+		{"eq(pict_type,I)", `'eq(pict_type,I)'`},
+		{"a;b", `'a;b'`},
+		{"a[b]c", `'a[b]c'`},
+		{"FontName=Arial,FontSize=24", `'FontName\=Arial,FontSize\=24'`},
+		{"/tmp/a=b.srt", `'/tmp/a\=b.srt'`},
+		{"a=b:c=d", `'a\=b\:c\=d'`},
+	} {
+		if got := escapeFilterArg(tc.value); got != tc.expected {
+			t.Errorf("escapeFilterArg(%q) = %s, want %s", tc.value, got, tc.expected)
+		}
+	}
+}
+
+func TestArgListValidate(t *testing.T) {
+	tests := []struct {
+		name    string
+		args    argList
+		wantErr bool
+	}{
+		{name: "clean named", args: argList{{Key: "w", Value: "1280"}}},
+		// Graph separators are quoted rather than rejected: escaping
+		// carries them to the filter whole.
+		{name: "semicolon in value", args: argList{{Key: "t", Value: "12;80"}}},
+		{name: "brackets in value", args: argList{{Key: "t", Value: "a[b]c"}}},
+		{name: "semicolon in positional", args: positionalArgs([]string{"a;b"})},
+		{name: "raw args are the caller's to get right", args: argList{{Value: "a;b", raw: true}}},
+
+		// ffmpeg fills a filter's options positionally only up to the
+		// first key=value. A further bare argument is "No option name
+		// near '...'" from 7.1 on, and lands on the wrong option before.
+		{name: "positional then named", args: append(positionalArgs([]string{"1280", "720"}), arg{Key: "color", Value: "black"})},
+		{name: "positional short of the last slot, then named", args: append(positionalArgs([]string{"1280"}), arg{Key: "h", Value: "-2"})},
+		{name: "named then positional", args: append(argList{{Key: "color", Value: "black"}}, arg{Value: "1280"}), wantErr: true},
+		{name: "positional interleaved after a named", args: append(positionalArgs([]string{"1280", "720"}), arg{Key: "color", Value: "black"}, arg{Value: "-1"}), wantErr: true},
+		{name: "an empty value is still a named argument", args: argList{{Key: "w", Value: "1280"}, {Key: "flags"}}},
+		{name: "positional after an empty-valued named argument", args: append(argList{{Key: "flags"}}, arg{Value: "1280"}), wantErr: true},
+		{name: "raw args are opaque, not a named argument", args: append(argList{{Value: "w=1280", raw: true}}, arg{Value: "720"})},
+
+		// A key is the one thing escaping cannot carry: ffmpeg reads an
+		// option name with no escaping of its own, so a key holding a
+		// character that would have to be quoted cannot be delivered and
+		// is rejected rather than rendered into a mis-parse.
+		{name: "equals in key", args: argList{{Key: "a=b", Value: "1"}}, wantErr: true},
+		{name: "colon in key", args: argList{{Key: "a:b", Value: "1"}}, wantErr: true},
+		{name: "space in key", args: argList{{Key: "a b", Value: "1"}}, wantErr: true},
+		{name: "comma in key", args: argList{{Key: "a,b", Value: "1"}}, wantErr: true},
+		{name: "backslash in key", args: argList{{Key: `a\b`, Value: "1"}}, wantErr: true},
+		{name: "quote in key", args: argList{{Key: "a'b", Value: "1"}}, wantErr: true},
+		{name: "a raw arg's key is not ours to check", args: argList{{Key: "a=b", Value: "1", raw: true}}},
+		{name: "the same characters in a value are fine", args: argList{{Key: "k", Value: `a=b:c\d e'f`}}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.args.Validate()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Validate() = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestFilterArgBuildersCompose(t *testing.T) {
 	tests := []struct {
 		name     string
-		args     positionalArgs
+		filter   *Filter
 		expected string
 	}{
 		{
-			name:     "empty args",
-			args:     positionalArgs{},
-			expected: "",
+			name: "positional then named",
+			filter: NewFilter("pad").
+				WithPositionalArgs("1280", "720", "-1", "-1").
+				WithArg("color", "black"),
+			expected: "pad=1280:720:-1:-1:color=black",
 		},
 		{
-			name:     "single arg",
-			args:     positionalArgs{"yuv420p"},
-			expected: "yuv420p",
+			name: "some positional slots then named",
+			filter: NewFilter("scale").
+				WithPositionalArgs("1280").
+				WithArg("h", "-2"),
+			expected: "scale=1280:h=-2",
 		},
 		{
-			name:     "multiple args",
-			args:     positionalArgs{"1920", "1080", "0", "0"},
-			expected: "1920:1080:0:0",
+			name: "positional in two calls",
+			filter: NewFilter("overlay").
+				WithPositionalArgs("10").
+				WithPositionalArgs("20"),
+			expected: "overlay=10:20",
+		},
+		{
+			name: "raw args after positional",
+			filter: NewFilter("pad").
+				WithPositionalArgs("1280", "720").
+				WithRawArgs("color=black"),
+			expected: "pad=1280:720:color=black",
+		},
+		{
+			name:     "raw args alone keep the caller's escaping",
+			filter:   NewFilter("subtitles").WithRawArgs("f=subs.srt:force_style='FontName=Arial,FontSize=24'"),
+			expected: "subtitles=f=subs.srt:force_style='FontName=Arial,FontSize=24'",
+		},
+		{
+			name:     "empty raw args add nothing",
+			filter:   NewFilter("null").WithRawArgs(""),
+			expected: "null",
+		},
+		{
+			name:     "Raw through WithArgs, then a named arg",
+			filter:   NewFilter("crop").WithArgs(Raw("iw/2:ih/2")).WithArg("exact", "1"),
+			expected: "crop=iw/2:ih/2:exact=1",
+		},
+		{
+			name:     "a caller's own FilterArguments is not discarded",
+			filter:   NewFilter("crop").WithArgs(stubArgs("iw/2:ih/2")).WithArg("exact", "1"),
+			expected: "crop=iw/2:ih/2:exact=1",
+		},
+		{
+			name:     "arguments keep appending after a caller's own",
+			filter:   NewFilter("crop").WithArgs(stubArgs("iw/2:ih/2")).WithArg("exact", "1").WithArg("keep_aspect", "1"),
+			expected: "crop=iw/2:ih/2:exact=1:keep_aspect=1",
+		},
+		{
+			name:     "WithNamedArgs replaces, WithArg appends",
+			filter:   NewFilter("scale").WithNamedArgs(map[string]string{"w": "1280"}).WithArg("h", "-2"),
+			expected: "scale=w=1280:h=-2",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := tt.args.String()
-			if result != tt.expected {
-				t.Errorf("Expected %q, got %q", tt.expected, result)
+			if got := tt.filter.String(); got != tt.expected {
+				t.Errorf("String() = %q, want %q", got, tt.expected)
+			}
+			if err := tt.filter.Validate(); err != nil {
+				t.Errorf("Validate() = %v, want nil", err)
+			}
+		})
+	}
+}
+
+// ffmpeg takes positional arguments only before the first key=value, so
+// WithPositionalArgs after WithArg builds a filter it would reject. The
+// arguments are all still there — nothing is silently dropped — and
+// Validate is what says no.
+func TestFilterPositionalAfterNamedFailsValidate(t *testing.T) {
+	f := NewFilter("pad").WithArg("color", "black").WithPositionalArgs("1280", "720")
+
+	err := f.Validate()
+	if err == nil {
+		t.Fatal("Validate() = nil, want an error for a positional argument after a named one")
+	}
+	for _, want := range []string{"positional argument", `"1280"`, `"color"`} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("Validate() = %q, want it to mention %s", err, want)
+		}
+	}
+	if got, want := f.String(), "pad=color=black:1280:720"; got != want {
+		t.Errorf("String() = %q, want %q: the arguments should still all be present", got, want)
+	}
+}
+
+// stubArgs is a FilterArguments implementation this package does not own,
+// standing in for a caller's own.
+type stubArgs string
+
+func (s stubArgs) String() string  { return string(s) }
+func (s stubArgs) Validate() error { return nil }
+
+// strictArgs is a caller's own FilterArguments that rejects what it holds,
+// standing in for one carrying a rule this package knows nothing about.
+type strictArgs string
+
+func (s strictArgs) String() string  { return string(s) }
+func (s strictArgs) Validate() error { return fmt.Errorf("strictArgs rejects %q", string(s)) }
+
+// Appending to a caller's own FilterArguments keeps its Validate. Its
+// rendering is all that survives into JSON, but a rule the caller attached
+// to its arguments must not stop applying just because a WithArg followed.
+func TestFilterCustomArgsKeepTheirValidate(t *testing.T) {
+	f := NewFilter("crop").WithArgs(strictArgs("iw/2:ih/2")).WithArg("exact", "1")
+
+	err := f.Validate()
+	if err == nil {
+		t.Fatal("Validate() = nil, want the custom arguments' own error")
+	}
+	if !strings.Contains(err.Error(), "strictArgs") {
+		t.Errorf("Validate() = %q, want the custom arguments' error", err)
+	}
+	if got, want := f.String(), "crop=iw/2:ih/2:exact=1"; got != want {
+		t.Errorf("String() = %q, want %q: the rendering is unchanged", got, want)
+	}
+	// The appended arguments are still checked on their own terms.
+	if err := NewFilter("crop").WithArgs(stubArgs("iw/2")).WithArg("exact", "1").WithPositionalArgs("2").Validate(); err == nil {
+		t.Error("Validate() = nil, want an error for a positional argument after a named one")
+	}
+}
+
+// A document may spell out an absent "args" as null, which decoded without
+// complaint before the arguments became one ordered list. It is a filter
+// with no arguments, not a decode error.
+func TestFilterArgsJSONNull(t *testing.T) {
+	for _, doc := range []string{
+		`{"input_labels":[],"name":"null","args":null,"output_labels":[]}`,
+		`{"input_labels":[],"name":"null","args":{},"output_labels":[]}`,
+	} {
+		var f Filter
+		if err := json.Unmarshal([]byte(doc), &f); err != nil {
+			t.Fatalf("Unmarshal(%s) = %v", doc, err)
+		}
+		if f.Args != nil {
+			t.Errorf("Args = %#v, want none, from %s", f.Args, doc)
+		}
+		if got, want := f.String(), "null"; got != want {
+			t.Errorf("String() = %q, want %q, from %s", got, want, doc)
+		}
+		data, err := json.Marshal(&f)
+		if err != nil {
+			t.Fatalf("Marshal: %v", err)
+		}
+		if strings.Contains(string(data), "args") {
+			t.Errorf("marshalled as %s, want no args member", data)
+		}
+	}
+
+	// On argList itself, null is the no-op encoding/json expects of an
+	// UnmarshalJSON it calls for a null member.
+	args := argList{{Key: "w", Value: "1280"}}
+	if err := json.Unmarshal([]byte("null"), &args); err != nil {
+		t.Fatalf("Unmarshal null: %v", err)
+	}
+	if got, want := args.String(), "w=1280"; got != want {
+		t.Errorf("null overwrote the arguments: %q, want %q", got, want)
+	}
+}
+
+// A whole filter may be null too — a member of a document's array that a
+// producer left out, say. That is a no-op, the same as for any other
+// struct, and not the nil dereference it used to be: Filter.UnmarshalJSON
+// handed encoding/json the address of its own pointer, which a null set to
+// nil under it.
+func TestFilterJSONNull(t *testing.T) {
+	f := Filter{Name: "scale"}
+	if err := json.Unmarshal([]byte("null"), &f); err != nil {
+		t.Fatalf("Unmarshal null: %v", err)
+	}
+	if f.Name != "scale" {
+		t.Errorf("null overwrote the filter: %#v", f)
+	}
+
+	var zero Filter
+	if err := json.Unmarshal([]byte("null"), &zero); err != nil {
+		t.Fatalf("Unmarshal null into a zero Filter: %v", err)
+	}
+
+	// And nested, which is how a null filter actually arrives.
+	var chain FilterChain
+	if err := json.Unmarshal([]byte(`{"filters":[null]}`), &chain); err != nil {
+		t.Fatalf("Unmarshal a null filter in a chain: %v", err)
+	}
+}
+
+// An argument name is the one thing ffmpeg gives no way to escape, so a
+// document carrying one that could not be delivered is rejected at the
+// decoder rather than rendered into a mis-parse. See [argList.Validate].
+func TestFilterArgsJSONEmptyKey(t *testing.T) {
+	const doc = `{"input_labels":[],"name":"scale","args":{"":"1280"},"output_labels":[]}`
+	var f Filter
+	if err := json.Unmarshal([]byte(doc), &f); err == nil {
+		t.Errorf("Unmarshal(%s) = nil, want an error for an empty argument name", doc)
+	}
+}
+
+func TestFilterArgsJSONRoundTrip(t *testing.T) {
+	tests := []struct {
+		name     string
+		filter   *Filter
+		wantArgs string // the "args" member, to pin the wire shape
+	}{
+		{
+			name:     "all named is an object",
+			filter:   NewFilter("scale").WithArg("w", "1280").WithArg("h", "-2"),
+			wantArgs: `{"w":"1280","h":"-2"}`,
+		},
+		{
+			name:     "all positional is an array of strings",
+			filter:   NewFilter("pad").WithPositionalArgs("1280", "720"),
+			wantArgs: `["1280","720"]`,
+		},
+		{
+			name:     "mixed is an array with the named args as objects",
+			filter:   NewFilter("pad").WithPositionalArgs("1280", "720").WithArg("color", "black"),
+			wantArgs: `["1280","720",{"color":"black"}]`,
+		},
+		{
+			name:     "raw is the one rendered string",
+			filter:   NewFilter("pad").WithPositionalArgs("1280").WithRawArgs("color=black"),
+			wantArgs: `"1280:color=black"`,
+		},
+		{
+			// An object cannot hold a key twice, and a decoder that kept
+			// only the last would silently drop w=100. ffmpeg takes the
+			// last too, so the arguments are kept in order rather than
+			// collapsed here.
+			name:     "a repeated key is an array of one-key objects",
+			filter:   NewFilter("scale").WithArg("w", "100").WithArg("w", "200"),
+			wantArgs: `[{"w":"100"},{"w":"200"}]`,
+		},
+		{
+			name:     "a repeated key among positionals",
+			filter:   NewFilter("pad").WithPositionalArgs("1280").WithArg("color", "red").WithArg("color", "black"),
+			wantArgs: `["1280",{"color":"red"},{"color":"black"}]`,
+		},
+		{
+			name:     "a value needing quotes keeps its unescaped form",
+			filter:   NewFilter("select").WithArg("e", "eq(pict_type,I)"),
+			wantArgs: `{"e":"eq(pict_type,I)"}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data, err := json.Marshal(tt.filter)
+			if err != nil {
+				t.Fatalf("Marshal: %v", err)
+			}
+			var wire struct {
+				Args json.RawMessage `json:"args"`
+			}
+			if err := json.Unmarshal(data, &wire); err != nil {
+				t.Fatalf("Unmarshal wire: %v", err)
+			}
+			if string(wire.Args) != tt.wantArgs {
+				t.Errorf("args member = %s, want %s", wire.Args, tt.wantArgs)
+			}
+
+			var back Filter
+			if err := json.Unmarshal(data, &back); err != nil {
+				t.Fatalf("Unmarshal: %v", err)
+			}
+			if got, want := back.String(), tt.filter.String(); got != want {
+				t.Errorf("round-tripped filter = %q, want %q", got, want)
 			}
 		})
 	}
@@ -650,5 +1019,28 @@ func BenchmarkFilterGraphString(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		_ = g.String()
+	}
+}
+
+func BenchmarkFilterGraphValidate(b *testing.B) {
+	// Setup a complex graph once
+	g := NewFilterGraph()
+
+	for i := range 10 {
+		chain := g.NewChain()
+		chain.Input(fmt.Sprintf("%d:v", i)).
+			Scale(1920, 1080).
+			FPS(30.0).
+			Format("yuv420p").
+			Crop(100, 100, 10, 10).
+			Output(fmt.Sprintf("out%d", i))
+	}
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		if err := g.Validate(); err != nil {
+			b.Fatal(err)
+		}
 	}
 }

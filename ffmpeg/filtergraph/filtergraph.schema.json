@@ -61,13 +61,19 @@
           "pattern": "^[a-zA-Z][a-zA-Z0-9_]*$"
         },
         "args": {
-          "description": "Arguments to pass to the filter. Either an object for key=value pairs (KVArgs) or an array for positional arguments (PositionalArgs).",
+          "description": "Arguments to pass to the filter, rendered in order and joined with ':'. An object holds named arguments alone (KVArgs), an array holds arguments in the order they render (OrderedArgs), and a string is a pre-formed argument string (RawArgs). Null means no arguments, the same as omitting the member.",
           "oneOf": [
             {
               "$ref": "#/$defs/KVArgs"
             },
             {
-              "$ref": "#/$defs/PositionalArgs"
+              "$ref": "#/$defs/OrderedArgs"
+            },
+            {
+              "$ref": "#/$defs/RawArgs"
+            },
+            {
+              "type": "null"
             }
           ]
         },
@@ -84,19 +90,33 @@
       "additionalProperties": false
     },
     "KVArgs": {
-      "description": "Key-value filter arguments. Each entry is serialized as 'key=value' and joined with ':'. An empty string value renders the key as a flag (no '=value').",
+      "description": "Named filter arguments. Each entry is serialized as 'key=value' and joined with ':'. An empty string value renders as 'key=' and sets the option to the empty string; FFmpeg has no bare-flag form for filter arguments, so a key never renders alone. A key may hold none of \"[]=;,:'\\\\\" or whitespace: FFmpeg reads an option name with no escaping of its own, so such a key cannot be delivered. Values are unrestricted. Arguments repeating a key take the OrderedArgs form, since an object cannot hold one twice.",
       "type": "object",
+      "propertyNames": {
+        "pattern": "^[^\\[\\]=;,:'\\\\\\s]+$"
+      },
       "additionalProperties": {
         "type": "string"
       }
     },
-    "PositionalArgs": {
-      "description": "Positional filter arguments joined with ':'. Used by filters like 'format' that accept values without keys.",
+    "OrderedArgs": {
+      "description": "Filter arguments in the order they render, joined with ':'. A string is positional, filling the filter's next declared option, and an object contributes its named arguments in place. FFmpeg fills options positionally only up to the first 'key=value', so every string must precede every object. An array of strings alone is the all-positional form used by filters like 'format'. This is also the form arguments take when a key repeats, one one-key object per argument, which FFmpeg resolves by taking the last.",
       "type": "array",
       "items": {
-        "type": "string"
+        "oneOf": [
+          {
+            "type": "string"
+          },
+          {
+            "$ref": "#/$defs/KVArgs"
+          }
+        ]
       },
       "minItems": 1
+    },
+    "RawArgs": {
+      "description": "A pre-formed argument string, rendered exactly as given, with the caller owning the escaping. Arguments carrying any raw part are written in this form rather than as the parts they were built from.",
+      "type": "string"
     },
     "Label": {
       "description": "A stream label used to connect filters across chains. May also be an FFmpeg input stream specifier such as '0:v' or '1:a'.",

@@ -1,0 +1,64 @@
+{
+    "programs": [
+
+    ],
+    "stream_groups": [
+        { "index": 0, "id": "0x1", "nb_streams": 2, "type": "IAMF Audio Element",
+            "components": [
+                { "nb_layers": 2, "audio_element_type": 0, "default_w": 0,
+                    "subcomponents": [
+                        { "channel_layout": "mono", "output_gain_flags": 0, "output_gain": "0/1" },
+                        { "channel_layout": "stereo", "output_gain_flags": 0, "output_gain": "0/1" },
+                        { "name": "demixing_info", "nb_subblocks": 1, "type": 1, "parameter_id": 998, "parameter_rate": 48000, "duration": 960, "constant_subblock_duration": 960,
+                            "pieces": [
+                                { "subblock_duration": 960, "dmixp_mode": 0 }
+                            ] },
+                        { "name": "recon_gain_info", "nb_subblocks": 1, "type": 2, "parameter_id": 101, "parameter_rate": 48000, "duration": 960, "constant_subblock_duration": 960,
+                            "pieces": [
+                                { "subblock_duration": 960 }
+                            ] }
+                    ] }
+            ],
+            "disposition": { "default": 0, "dub": 0, "original": 0, "comment": 0, "lyrics": 0, "karaoke": 0, "forced": 0, "hearing_impaired": 0, "visual_impaired": 0, "clean_effects": 0, "attached_pic": 0, "timed_thumbnails": 0, "non_diegetic": 0, "captions": 0, "descriptions": 0, "metadata": 0, "dependent": 0, "still_image": 0, "multilayer": 0 },
+            "streams": [
+                { "index": 0, "codec_name": "opus", "codec_long_name": "Opus (Opus Interactive Audio Codec)", "codec_type": "audio", "codec_tag_string": "[0][0][0][0]", "codec_tag": "0x0000", "mime_codec_string": "opus", "sample_fmt": "fltp", "sample_rate": "48000", "channels": 1, "channel_layout": "mono", "bits_per_sample": 0, "initial_padding": 0, "id": "0x0", "r_frame_rate": "0/0", "avg_frame_rate": "0/0", "time_base": "1/48000", "extradata_size": 19,
+                    "disposition": { "default": 1, "dub": 0, "original": 0, "comment": 0, "lyrics": 0, "karaoke": 0, "forced": 0, "hearing_impaired": 0, "visual_impaired": 0, "clean_effects": 0, "attached_pic": 0, "timed_thumbnails": 0, "non_diegetic": 0, "captions": 0, "descriptions": 0, "metadata": 0, "dependent": 0, "still_image": 0, "multilayer": 0 } },
+                { "index": 1, "codec_name": "opus", "codec_long_name": "Opus (Opus Interactive Audio Codec)", "codec_type": "audio", "codec_tag_string": "[0][0][0][0]", "codec_tag": "0x0000", "mime_codec_string": "opus", "sample_fmt": "fltp", "sample_rate": "48000", "channels": 1, "channel_layout": "mono", "bits_per_sample": 0, "initial_padding": 0, "id": "0x1", "r_frame_rate": "0/0", "avg_frame_rate": "0/0", "time_base": "1/48000", "extradata_size": 19,
+                    "disposition": { "default": 0, "dub": 0, "original": 0, "comment": 0, "lyrics": 0, "karaoke": 0, "forced": 0, "hearing_impaired": 0, "visual_impaired": 0, "clean_effects": 0, "attached_pic": 0, "timed_thumbnails": 0, "non_diegetic": 0, "captions": 0, "descriptions": 0, "metadata": 0, "dependent": 1, "still_image": 0, "multilayer": 0 } }
+            ] },
+        { "index": 1, "id": "0x2", "nb_streams": 2, "type": "IAMF Mix Presentation",
+            "components": [
+                { "nb_submixes": 1,
+                    "subcomponents": [
+                        { "en-us": "Default" },
+                        { "nb_elements": 1, "nb_layouts": 1, "default_mix_gain": "0/256",
+                            "pieces": [
+                                { "stream_id": 1, "default_mix_gain": "0/256", "headphones_rendering_mode": 0,
+                                    "subpieces": [
+                                        { "en-us": "Sub" },
+                                        { "name": "element_mix_config", "nb_subblocks": 0, "type": 0, "parameter_id": 100, "parameter_rate": 48000, "duration": 0, "constant_subblock_duration": 0 }
+                                    ] },
+                                { "name": "output_mix_config", "nb_subblocks": 0, "type": 0, "parameter_id": 100, "parameter_rate": 48000, "duration": 0, "constant_subblock_duration": 0 },
+                                { "sound_system": "stereo", "integrated_loudness": "0/256", "digital_peak": "0/256", "true_peak": "0/1", "dialogue_anchored_loudness": "0/1", "album_anchored_loudness": "0/1" }
+                            ] }
+                    ] }
+            ],
+            "disposition": { "default": 0, "dub": 0, "original": 0, "comment": 0, "lyrics": 0, "karaoke": 0, "forced": 0, "hearing_impaired": 0, "visual_impaired": 0, "clean_effects": 0, "attached_pic": 0, "timed_thumbnails": 0, "non_diegetic": 0, "captions": 0, "descriptions": 0, "metadata": 0, "dependent": 0, "still_image": 0, "multilayer": 0 },
+            "streams": [
+                { "index": 0, "codec_name": "opus", "codec_long_name": "Opus (Opus Interactive Audio Codec)", "codec_type": "audio", "codec_tag_string": "[0][0][0][0]", "codec_tag": "0x0000", "mime_codec_string": "opus", "sample_fmt": "fltp", "sample_rate": "48000", "channels": 1, "channel_layout": "mono", "bits_per_sample": 0, "initial_padding": 0, "id": "0x0", "r_frame_rate": "0/0", "avg_frame_rate": "0/0", "time_base": "1/48000", "extradata_size": 19,
+                    "disposition": { "default": 1, "dub": 0, "original": 0, "comment": 0, "lyrics": 0, "karaoke": 0, "forced": 0, "hearing_impaired": 0, "visual_impaired": 0, "clean_effects": 0, "attached_pic": 0, "timed_thumbnails": 0, "non_diegetic": 0, "captions": 0, "descriptions": 0, "metadata": 0, "dependent": 0, "still_image": 0, "multilayer": 0 } },
+                { "index": 1, "codec_name": "opus", "codec_long_name": "Opus (Opus Interactive Audio Codec)", "codec_type": "audio", "codec_tag_string": "[0][0][0][0]", "codec_tag": "0x0000", "mime_codec_string": "opus", "sample_fmt": "fltp", "sample_rate": "48000", "channels": 1, "channel_layout": "mono", "bits_per_sample": 0, "initial_padding": 0, "id": "0x1", "r_frame_rate": "0/0", "avg_frame_rate": "0/0", "time_base": "1/48000", "extradata_size": 19,
+                    "disposition": { "default": 0, "dub": 0, "original": 0, "comment": 0, "lyrics": 0, "karaoke": 0, "forced": 0, "hearing_impaired": 0, "visual_impaired": 0, "clean_effects": 0, "attached_pic": 0, "timed_thumbnails": 0, "non_diegetic": 0, "captions": 0, "descriptions": 0, "metadata": 0, "dependent": 1, "still_image": 0, "multilayer": 0 } }
+            ] }
+    ],
+    "streams": [
+        { "index": 0, "codec_name": "opus", "codec_long_name": "Opus (Opus Interactive Audio Codec)", "codec_type": "audio", "codec_tag_string": "[0][0][0][0]", "codec_tag": "0x0000", "mime_codec_string": "opus", "sample_fmt": "fltp", "sample_rate": "48000", "channels": 1, "channel_layout": "mono", "bits_per_sample": 0, "initial_padding": 0, "id": "0x0", "r_frame_rate": "0/0", "avg_frame_rate": "0/0", "time_base": "1/48000", "extradata_size": 19,
+            "disposition": { "default": 1, "dub": 0, "original": 0, "comment": 0, "lyrics": 0, "karaoke": 0, "forced": 0, "hearing_impaired": 0, "visual_impaired": 0, "clean_effects": 0, "attached_pic": 0, "timed_thumbnails": 0, "non_diegetic": 0, "captions": 0, "descriptions": 0, "metadata": 0, "dependent": 0, "still_image": 0, "multilayer": 0 } },
+        { "index": 1, "codec_name": "opus", "codec_long_name": "Opus (Opus Interactive Audio Codec)", "codec_type": "audio", "codec_tag_string": "[0][0][0][0]", "codec_tag": "0x0000", "mime_codec_string": "opus", "sample_fmt": "fltp", "sample_rate": "48000", "channels": 1, "channel_layout": "mono", "bits_per_sample": 0, "initial_padding": 0, "id": "0x1", "r_frame_rate": "0/0", "avg_frame_rate": "0/0", "time_base": "1/48000", "extradata_size": 19,
+            "disposition": { "default": 0, "dub": 0, "original": 0, "comment": 0, "lyrics": 0, "karaoke": 0, "forced": 0, "hearing_impaired": 0, "visual_impaired": 0, "clean_effects": 0, "attached_pic": 0, "timed_thumbnails": 0, "non_diegetic": 0, "captions": 0, "descriptions": 0, "metadata": 0, "dependent": 1, "still_image": 0, "multilayer": 0 } }
+    ],
+    "chapters": [
+
+    ],
+    "format": { "filename": "ffprobe/testdata/media/groups.iamf", "nb_streams": 2, "nb_programs": 0, "nb_stream_groups": 2, "format_name": "iamf", "format_long_name": "Raw Immersive Audio Model and Formats", "size": "9762", "probe_score": 51 }
+}

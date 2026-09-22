@@ -114,6 +114,28 @@ func (s *Stream) IsDefault() bool { return s.Disposition.Default.Bool() }
 // IsForced reports the forced disposition flag.
 func (s *Stream) IsForced() bool { return s.Disposition.Forced.Bool() }
 
+// StreamID returns the container's stream id as a number: what ffmpeg's
+// "i:" stream specifier matches on, in -map 0:i:2 or
+// -map_metadata:s:a:0 0:s:i:2. It is not the stream index. ffprobe prints
+// the id in hex, so the raw ID field ("0x2") needs this before it can go
+// back into an argument. The second result is false when the stream carries
+// no id, which is how ffprobe reports the formats that have none.
+func (s *Stream) StreamID() (int, bool) {
+	raw := strings.TrimSpace(s.ID)
+	if raw == "" || raw == notAvailable {
+		return 0, false
+	}
+	base := 10
+	if len(raw) > 2 && raw[0] == '0' && (raw[1] == 'x' || raw[1] == 'X') {
+		raw, base = raw[2:], 16
+	}
+	v, err := strconv.ParseInt(raw, base, 64)
+	if err != nil {
+		return 0, false
+	}
+	return int(v), true
+}
+
 // FrameRate returns the average frame rate when known, else the nominal
 // r_frame_rate. Audio streams and attached pictures (whose r_frame_rate is
 // the meaningless 90000/1 of their time base) return an invalid Rat.

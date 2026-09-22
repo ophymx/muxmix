@@ -1,0 +1,12 @@
+{
+    "programs": [
+
+    ],
+    "stream_groups": [
+
+    ],
+    "streams": [
+        { "index": 0, "codec_name": "flac", "codec_type": "audio" }
+    ],
+    "format": { "filename": "ffprobe/testdata/media/audio.flac", "duration": "1.000000" }
+}

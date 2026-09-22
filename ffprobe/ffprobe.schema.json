@@ -1386,6 +1386,13 @@
     "StreamGroupComponent": {
       "type": "object",
       "properties": {
+        "side_data_list": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SideData"
+          },
+          "description": "Added in FFmpeg 9.0."
+        },
         "subcomponents": {
           "type": "array",
           "items": {
@@ -1442,5 +1449,5 @@
       }
     }
   },
-  "description": "ffprobe -print_format json output, unioned over FFmpeg n4.4.4, n5.1.4, n6.0.1, n6.1.2, n7.0.2, n7.1.3, n8.0, n8.1.2. Numeric fields accept both JSON numbers and numeric strings because ffprobe's JSON writer prints most of them as strings."
+  "description": "ffprobe -print_format json output, unioned over FFmpeg n4.4.4, n5.1.4, n6.0.1, n6.1.2, n7.0.2, n7.1.3, n8.0, n8.1.2, n9.0.2. Numeric fields accept both JSON numbers and numeric strings because ffprobe's JSON writer prints most of them as strings."
 }

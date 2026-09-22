@@ -304,8 +304,13 @@ func NoProgressPipe() RunOption {
 	return func(c *runConfig) { c.noProgressPipe = true }
 }
 
-// NoDefaultArgs runs the Command exactly as rendered, without the runner's
-// -hide_banner, -nostdin, -loglevel and -y defaults.
+// NoDefaultArgs runs the Command exactly as rendered, dropping the whole
+// set of runner defaults: the unconditional -hide_banner and -nostdin, the
+// -loglevel error added unless the command sets -loglevel or -v, and the -y
+// added unless it sets -y or -n. It is all or nothing — pass it when the
+// command already carries its own equivalents, and note that losing
+// -loglevel error is the one that changes what ffmpeg writes to the log
+// Result.Stderr captures.
 func NoDefaultArgs() RunOption {
 	return func(c *runConfig) { c.noDefaults = true }
 }

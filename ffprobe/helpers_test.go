@@ -3,6 +3,7 @@ package ffprobe
 import (
 	"encoding/json"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 )
@@ -121,6 +122,52 @@ func TestRotation(t *testing.T) {
 		}
 		if tag, ok := v.Tags.Get("rotate"); ok && tag != "270" {
 			t.Errorf("%s: rotate tag = %q", filepath.Base(dir), tag)
+		}
+	}
+}
+
+func TestStreamID(t *testing.T) {
+	for _, tc := range []struct {
+		src  string
+		want int
+		ok   bool
+	}{
+		// ffprobe prints the id in hex.
+		{`{"id":"0x2"}`, 2, true},
+		{`{"id":"0x100"}`, 256, true},
+		{`{"id":"0x0"}`, 0, true},
+		{`{"id":"0X1f"}`, 31, true},
+		// Absent, or present and unknown, is not an id.
+		{`{}`, 0, false},
+		{`{"id":"N/A"}`, 0, false},
+		{`{"id":""}`, 0, false},
+		{`{"id":"nonsense"}`, 0, false},
+		// A leading zero is not octal: decimal, for tools that mimic
+		// ffprobe without the hex.
+		{`{"id":"17"}`, 17, true},
+		{`{"id":"017"}`, 17, true},
+	} {
+		got, ok := decodeStream(t, tc.src).StreamID()
+		if got != tc.want || ok != tc.ok {
+			t.Errorf("%s: StreamID() = %d, %v; want %d, %v", tc.src, got, ok, tc.want, tc.ok)
+		}
+	}
+
+	// MPEG-TS PIDs are the ids -map 0:i:256 selects, and every ffprobe
+	// the captures cover prints them.
+	for _, dir := range captureDirs(t) {
+		res := decodeCapture(t, filepath.Join(dir, "programs_ts.basic.json"))
+		var got []int
+		for _, s := range res.Streams {
+			id, ok := s.StreamID()
+			if !ok {
+				t.Errorf("%s: stream %d has no id", filepath.Base(dir), s.Index.Int())
+				continue
+			}
+			got = append(got, id)
+		}
+		if !slices.Equal(got, []int{0x100, 0x101, 0x102}) {
+			t.Errorf("%s: stream ids = %v, want [256 257 258]", filepath.Base(dir), got)
 		}
 	}
 }

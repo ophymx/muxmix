@@ -35,8 +35,19 @@ filtergraph.NewFilter("scale").WithInstance("main")  // scale@main=...
 ```
 
 `WithArg` keeps the order arguments were added; `WithNamedArgs(map)` sorts
-its keys. Values containing `,`, `:`, `[`, `]`, `=`, `;` or whitespace are
-quoted.
+its keys. Values containing `,`, `:`, `[`, `]`, `=`, `;`, `'`, `\` or
+whitespace are quoted and escaped, so the filter receives them byte for
+byte — quoting alone carries the graph separators, while `:`, `=`, `\`, `'`
+and whitespace need the backslash as well. `=` matters most to a positional
+argument, which ffmpeg reads as an option name the moment it finds one:
+unescaped, `movie=/tmp/a=b.srt` looks like the option `/tmp/a` and the file
+is never opened.
+
+Keys are the exception. ffmpeg reads an option name with no escaping of its
+own — quoting one does not survive the graph parser — so a key holding any
+of those characters cannot be delivered however it is written, and
+`Validate` rejects it rather than render something ffmpeg would mis-read.
+Real option names are `[a-zA-Z0-9_]`, so this only ever catches a mistake.
 
 ## Overlay
 
@@ -49,6 +60,11 @@ g.NewChain().Input("0:v", "pip").Overlay("W-w-10", "H-h-10").Output("out")
 
 ## Validation and JSON
 
-`Validate` checks filter and label names, that every non-specifier input
-label has a producing output, and that output labels are unique. Graphs
-marshal to and from JSON with argument order preserved.
+`Validate` checks filter and label names, argument keys and argument order,
+that every non-specifier input label has a producing output, and that output
+labels are unique. Graphs marshal to and from JSON with argument order
+preserved: named arguments alone are an object, positional arguments alone
+an array of strings, and anything else — a mix, or a key used twice — an
+array in argument order with each named argument as a one-key object.
+`filtergraph.schema.json` describes that wire format, and `schema_test.go`
+holds it to what the encoder writes.

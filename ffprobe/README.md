@@ -21,7 +21,7 @@ decoding side data, colour detection and version gating.
 
 ## Versions
 
-One set of types decodes the output of FFmpeg 4.4 through 8.1. The types are
+One set of types decodes the output of FFmpeg 4.4 through 9.0. The types are
 the union of every release's `doc/ffprobe.xsd`, so a field that only some
 releases print is simply absent from older or newer output. Every scalar
 field reports whether it was present:

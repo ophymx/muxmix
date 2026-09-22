@@ -1,0 +1,20 @@
+{
+    "programs": [
+
+    ],
+    "stream_groups": [
+        {             "streams": [
+                { "index": 0, "codec_name": "opus", "codec_type": "audio" },
+                { "index": 1, "codec_name": "opus", "codec_type": "audio" }
+            ] },
+        {             "streams": [
+                { "index": 0, "codec_name": "opus", "codec_type": "audio" },
+                { "index": 1, "codec_name": "opus", "codec_type": "audio" }
+            ] }
+    ],
+    "streams": [
+        { "index": 0, "codec_name": "opus", "codec_type": "audio" },
+        { "index": 1, "codec_name": "opus", "codec_type": "audio" }
+    ],
+    "format": { "filename": "ffprobe/testdata/media/groups.iamf" }
+}
