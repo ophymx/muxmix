@@ -13,8 +13,8 @@ import (
 // ─── live tests against a real ffmpeg ──────────────────────────────────────
 
 // TestLiveFilterArgumentOrder holds the orderings Validate accepts to a
-// real ffmpeg: every one of them has to parse, on every release
-// matrix/test.sh covers.
+// real ffmpeg: each one has to parse on every release matrix/test.sh
+// covers.
 func TestLiveFilterArgumentOrder(t *testing.T) {
 	if err := ffmpeg.ValidateInstall(); err != nil {
 		t.Skip("ffmpeg not installed")
@@ -30,13 +30,9 @@ func TestLiveFilterArgumentOrder(t *testing.T) {
 		// Filling only some of the positional slots before switching to
 		// names is allowed: here w, then h by name.
 		{"some positional then named", filtergraph.NewFilter("scale").WithPositionalArgs("1280").WithArg("h", "-2")},
-		// An empty value keeps its key, so it stays a named argument and
-		// the ordering rule is untouched by it. Rendered bare it would be
-		// a positional argument, and this would not parse. Which options
-		// take an empty value is the filter's business and moves between
-		// releases — scale's flags= is refused by 4.4 and accepted from
-		// 5.1 — so the readback here is metadata's key=, which every
-		// release in the matrix takes.
+		// An empty value keeps its key, so the argument stays named and
+		// the ordering rule is untouched by it. metadata's key= rather
+		// than scale's flags=, which 4.4 refuses and 5.1 accepts.
 		{"empty value is a named argument", filtergraph.NewFilter("metadata").WithArg("mode", "print").WithArg("key", "")},
 		{"raw args carry their own order", filtergraph.NewFilter("pad").WithRawArgs("1280:720:-1:-1:color=black")},
 		{"a value needing quotes survives the round trip", filtergraph.NewFilter("drawbox").WithArg("enable", "between(t,0,5)").WithArg("color", "red")},
@@ -57,37 +53,29 @@ func TestLiveFilterArgumentOrder(t *testing.T) {
 	}
 }
 
-// TestLiveFilterMisorderedArguments is the other half of the ordering rule,
-// and the reason Validate cannot simply mirror whether ffmpeg runs: a
-// positional argument after a named one is refused by some releases and
-// silently misread by the rest.
+// TestLiveFilterMisorderedArguments is the other half of the rule, and the
+// reason Validate cannot simply mirror whether ffmpeg runs.
 //
 // From 7.1 on, libavfilter gives up the remaining shorthand at the first
-// key=value and answers "No option name near '...'". Up to 6.1 it did not:
-// the walk over the filter's options carried on from where the named
-// argument left it, so the bare arguments landed on whatever option came
-// next and the description ran. pad=color=black:1280:720 pads a 64x64 input
-// to 64x1280 there, having read 1280 as the height and 720 as x.
+// key=value and answers "No option name near '...'". Up to 6.1 the walk
+// over the filter's options carried on from where the named argument left
+// it instead, so pad=color=black:1280:720 runs and pads a 64x64 input to
+// 64x1280, having read 1280 as the height and 720 as x. 5.1 reads it the
+// same way and happens to fail, landing 1280 on eval.
 //
-// A misreading is not always quiet, which is the other reason not to test
-// for a refusal: 5.1 reads pad=color=black:1280:720 the same way but lands
-// 1280 on eval, an enum, and fails there. The description was still not
-// read as written.
-//
-// So the live claim is not "ffmpeg refuses this" — half the matrix runs it.
-// It is that ffmpeg never reads it as written: each case carries the frame
-// size it names, and ffmpeg has to either not reach a filter at all or
-// report some other size.
+// So the claim is not that ffmpeg refuses these — half the matrix runs
+// them — but that none of them means what it says: each carries the frame
+// size it names, and ffmpeg has to either not reach a filter or report
+// some other size.
 func TestLiveFilterMisorderedArguments(t *testing.T) {
 	if err := ffmpeg.ValidateInstall(); err != nil {
 		t.Skip("ffmpeg not installed")
 	}
 
 	for _, tc := range []struct {
-		name string
-		// filter pads to asWritten if ffmpeg reads it as written.
+		name      string
 		filter    *filtergraph.Filter
-		asWritten string
+		asWritten string // the size filter names, if ffmpeg read it as written
 	}{
 		{"named then positional", filtergraph.NewFilter("pad").WithArg("color", "black").WithPositionalArgs("1280", "720"), "1280x720"},
 		{"positional after a named", filtergraph.NewFilter("pad").WithPositionalArgs("1280", "720").WithArg("color", "black").WithPositionalArgs("-1"), "1280x720"},
@@ -100,9 +88,9 @@ func TestLiveFilterMisorderedArguments(t *testing.T) {
 
 			size, err := paddedSize(t, tc.filter)
 			if err != nil {
-				// ffmpeg never got as far as a frame, either refusing the
-				// description or misreading it into a value the filter
-				// would not take. Nothing to disagree with a size about.
+				// No frame, so no size to disagree with: ffmpeg either
+				// refused the description or misread it into a value the
+				// filter would not take.
 				return
 			}
 			if size == tc.asWritten {
@@ -118,11 +106,11 @@ func TestLiveFilterMisorderedArguments(t *testing.T) {
 // showinfoSize picks the frame size out of a showinfo line.
 var showinfoSize = regexp.MustCompile(`\bs:(\d+x\d+)`)
 
-// paddedSize runs the filter with a showinfo behind it and reads back the
-// size of the frame that reached it, which is how a description ffmpeg
-// accepts is held to meaning what it says rather than merely parsing. The
-// error it returns is ffmpeg's, from anywhere in the graph; a run that
-// succeeds without naming a size is the test's bug, not the filter's.
+// paddedSize reads the frame size back out of a showinfo behind the
+// filter, which is what holds a description ffmpeg accepts to meaning what
+// it says rather than merely parsing. The error is ffmpeg's, from anywhere
+// in the graph; a run that succeeds without naming a size is this helper's
+// bug, not the filter's.
 func paddedSize(t *testing.T, f *filtergraph.Filter) (string, error) {
 	t.Helper()
 	// showinfo logs at info, which the runner's default -loglevel error
@@ -145,17 +133,16 @@ func paddedSize(t *testing.T, f *filtergraph.Filter) (string, error) {
 }
 
 // TestLiveFilterArgumentEscaping checks that a value arrives at the filter
-// byte for byte. The setpts filter is the readback: every value below is an
-// invalid expression, so ffmpeg names the one it received ("Error while
-// parsing expression '...'"), and finding the value in its log means both
-// parsers handed it over intact. A value split on ":", stripped of a
-// backslash or trimmed of its whitespace fails the search instead.
+// byte for byte. Every value below is an invalid expression, so ffmpeg
+// names the one it received back ("Error while parsing expression '...'"),
+// and finding it in the log means both parsers handed it over intact. A
+// value split on ":", stripped of a backslash or trimmed of its whitespace
+// fails the search instead.
 //
-// setpts rather than something more obvious because its one option holds a
-// string ffmpeg does not take apart. format's pix_fmts looks like the
-// better readback and is not: 4.4 reads ":" in it as a list separator and
-// reports the halves, so a value carrying one is never named back whole
-// however faithfully it was delivered.
+// setpts because its one option holds a string ffmpeg does not take apart.
+// format's pix_fmts looks like the better readback and is not: 4.4 reads
+// ":" there as a list separator and reports the halves, so a value
+// carrying one is never named back whole however well it was delivered.
 func TestLiveFilterArgumentEscaping(t *testing.T) {
 	if err := ffmpeg.ValidateInstall(); err != nil {
 		t.Skip("ffmpeg not installed")
@@ -299,14 +286,12 @@ func TestLiveFilterArgumentKeys(t *testing.T) {
 	}
 }
 
-// reachedFilter reports whether ffmpeg named the value back, which it does
-// only once both parsers have handed it over whole. Searching the log for
-// the value alone would be fooled by the releases that echo the filter
-// description in a parse error, because a value that was not escaped
-// appears there verbatim; the rendering is removed first, which is a no-op
-// when the value was escaped and erases the false positive when it was not.
-// Matching on ffmpeg's own wording is avoided: it has changed between the
-// releases matrix/test.sh covers, and the readback has not.
+// reachedFilter reports whether ffmpeg named the value back, which happens
+// only once both parsers have handed it over whole. The rendering is
+// removed from the log first: releases that echo the filter description in
+// a parse error would otherwise show an unescaped value verbatim and pass.
+// Matching ffmpeg's own wording is avoided, having changed across the
+// matrix where the readback has not.
 func reachedFilter(stderr []byte, rendered, value string) bool {
 	return strings.Contains(strings.ReplaceAll(string(stderr), rendered, ""), value)
 }

@@ -52,10 +52,9 @@ func (f *Filter) WithNamedArgs(args map[string]string) *Filter {
 // Validate. See [argList.Validate].
 //
 // An empty value renders as key= and sets the option to the empty string,
-// which options that take a string accept and options that take a number or
-// an expression reject by name. An empty key makes the argument positional,
-// the same as WithPositionalArgs, since that is what an argument with no key
-// is here; ffmpeg has no bare-flag form for anything else.
+// which options taking a string accept and options taking a number or an
+// expression reject by name. An empty key makes the argument positional,
+// the same as WithPositionalArgs.
 func (f *Filter) WithArg(key, value string) *Filter {
 	return f.appendArgs(argList{{Key: key, Value: value}})
 }
@@ -69,9 +68,9 @@ func (f *Filter) WithArg(key, value string) *Filter {
 //		WithArg("color", "black") // pad=1280:720:-1:-1:color=black
 //
 // Not every positional slot has to be filled before switching to names —
-// scale=1280:h=-2 is valid — but ffmpeg accepts no positional argument
-// after a named one, so calling this after WithArg builds a filter that
-// fails Validate and that ffmpeg would reject. See [argList] for why.
+// scale=1280:h=-2 is valid — but no positional argument may follow a named
+// one, so calling this after WithArg builds a filter that fails Validate
+// and that no ffmpeg reads as written. See [argList.Validate] for why.
 func (f *Filter) WithPositionalArgs(args ...string) *Filter {
 	return f.appendArgs(positionalArgs(args))
 }
@@ -82,10 +81,9 @@ func (f *Filter) WithRawArgs(args string) *Filter {
 	return f.appendArgs(argList{{Value: args, raw: true}})
 }
 
-// appendArgs adds to the filter's arguments. Arguments already set through
-// a FilterArguments implementation this package does not own are kept
-// whole, rendering and Validate both, so that nothing a caller passed is
-// dropped and nothing it rejects starts passing. See [joinedArgs].
+// appendArgs adds to the filter's arguments, keeping a foreign
+// FilterArguments implementation whole rather than its rendering, so its
+// Validate survives. See [joinedArgs].
 func (f *Filter) appendArgs(add argList) *Filter {
 	switch existing := f.Args.(type) {
 	case nil:
