@@ -115,30 +115,17 @@ func (a argList) String() string {
 	return strings.Join(parts, ":")
 }
 
-// invalidArgChars are the characters that would end the filter and put what
-// follows into the surrounding graph.
-var invalidArgChars = regexp.MustCompile(`[;\[\]]`)
-
-// Validate implements [FilterArguments]. It rejects characters that would
-// break out of the filter, and a positional argument after a named one,
-// which ffmpeg cannot parse. Arguments holding a raw string are the
-// caller's to get right: they pass unchecked, and an argument after one is
-// checked as though the raw string were not there, since what it ends with
-// is unknowable here.
+// Validate implements [FilterArguments]. The only thing it can reject is a
+// positional argument after a named one, which ffmpeg cannot parse; no
+// character is off limits, because escapeFilterArg carries every one of
+// them past both parsers. Raw arguments are the caller's to get right: they
+// pass unchecked, and an argument after one is checked as though the raw
+// string were not there, since what it ends with is unknowable here.
 func (a argList) Validate() error {
 	var named string
 	for _, one := range a {
 		if one.raw {
 			continue
-		}
-		if invalidArgChars.MatchString(one.Key) {
-			return fmt.Errorf("invalid characters in filter argument key: %s", one.Key)
-		}
-		if invalidArgChars.MatchString(one.Value) {
-			if one.Key == "" {
-				return fmt.Errorf("invalid characters in positional argument: %s", one.Value)
-			}
-			return fmt.Errorf("invalid characters in filter argument value: %s", one.Value)
 		}
 		if one.Key != "" {
 			named = one.Key
@@ -293,15 +280,42 @@ func (a *argList) decodeArray(dec *json.Decoder) error {
 // formatNumber prints a float the way people type it: 30, 23.976, 0.8.
 func formatNumber(f float64) string { return strconv.FormatFloat(f, 'f', -1, 64) }
 
-// escapeFilterArg quotes a key or value that would otherwise be read as
-// filter syntax.
+// escapeFilterArg renders a key or value so that ffmpeg delivers it to the
+// filter unchanged.
+//
+// A filter description is unescaped twice. The graph parser goes first: it
+// splits on "," ";" "[" "]", consumes backslashes outside quotes and strips
+// a quoted section's quotes while passing its contents through untouched.
+// The argument parser then splits what is left on ":" and consumes the
+// backslashes that survived. So quoting carries the graph separators and
+// whitespace through on its own, while ":" and "\" have to be escaped
+// inside the quotes as well, and a literal "'" cannot appear inside them at
+// all — it is written by closing the quotes, escaping it for both parsers,
+// and reopening.
 func escapeFilterArg(s string) string {
-	if needsQuoting(s) {
-		return "'" + strings.ReplaceAll(s, "'", "\\'") + "'"
+	if !needsQuoting(s) {
+		return s
 	}
-	return s
+	var b strings.Builder
+	b.WriteByte('\'')
+	for _, r := range s {
+		switch r {
+		case '\'':
+			b.WriteString(`'\\\''`)
+		case '\\':
+			b.WriteString(`\\`)
+		case ':':
+			b.WriteString(`\:`)
+		default:
+			b.WriteRune(r)
+		}
+	}
+	b.WriteByte('\'')
+	return b.String()
 }
 
-var specialChars = regexp.MustCompile(`[\[\]=;,\s\\']`)
+// specialChars are the characters that one parser or the other would act on,
+// so a key or value holding any of them is quoted and escaped.
+var specialChars = regexp.MustCompile(`[\[\]=;,:\s\\']`)
 
 func needsQuoting(s string) bool { return specialChars.MatchString(s) }

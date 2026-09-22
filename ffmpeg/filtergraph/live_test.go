@@ -2,6 +2,7 @@ package filtergraph_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/ophymx/muxmix/ffmpeg"
@@ -56,6 +57,52 @@ func TestLiveFilterArgumentOrder(t *testing.T) {
 			}
 			if (validateErr == nil) != (runErr == nil) {
 				t.Errorf("Validate() = %v but ffmpeg = %v, for %q", validateErr, runErr, tc.filter)
+			}
+		})
+	}
+}
+
+// TestLiveFilterArgumentEscaping checks that a value arrives at the filter
+// byte for byte. The format filter is the readback: every value below is an
+// invalid pixel format, so ffmpeg names the one it received, and finding the
+// value in its log means both parsers handed it over intact. A value split
+// on ":" or stripped of a backslash fails the search instead.
+func TestLiveFilterArgumentEscaping(t *testing.T) {
+	if err := ffmpeg.ValidateInstall(); err != nil {
+		t.Skip("ffmpeg not installed")
+	}
+
+	for _, value := range []string{
+		"plainvalue",
+		"a,b",        // a graph separator: quoting carries it
+		"a:b",        // the argument separator: needs escaping inside the quotes
+		`a\b`,        // a backslash the argument parser would otherwise eat
+		"a'b",        // cannot sit inside the quotes at all
+		"a b",        // whitespace
+		"a=b",        // the key/value separator
+		"a;b",        // a chain separator
+		"a[b]c",      // label brackets
+		`it's a:b\c`, // all of them at once
+	} {
+		t.Run(value, func(t *testing.T) {
+			f := filtergraph.NewFilter("format").WithArg("pix_fmts", value)
+			if err := f.Validate(); err != nil {
+				t.Fatalf("Validate() = %v", err)
+			}
+			cmd := ffmpeg.NewCommand().
+				Input("color=c=red:s=64x64:d=0.1", ffmpeg.Lavfi()).
+				Output("-", ffmpeg.Filter("v", f), ffmpeg.Frames("v", 1), ffmpeg.Format("null"))
+
+			res, err := ffmpeg.Run(context.Background(), cmd)
+			if err == nil {
+				t.Fatalf("%q was accepted as a pixel format", value)
+			}
+			if res == nil {
+				t.Fatalf("ffmpeg did not start: %v", err)
+			}
+			if !strings.Contains(string(res.Stderr), value) {
+				t.Errorf("%s rendered as %s, and ffmpeg reported:\n%s\nwant the value %q to reach the filter whole",
+					f.Name, f, strings.TrimSpace(string(res.Stderr)), value)
 			}
 		})
 	}

@@ -94,6 +94,36 @@ func TestArgList(t *testing.T) {
 	}
 }
 
+// The encodings below are the ones a real ffmpeg was observed to deliver
+// unchanged; TestLiveFilterArgumentEscaping re-checks them against the
+// binary. The graph parser strips the quotes and the argument parser eats
+// the backslashes, so ":" and "\" need both, and "'" cannot sit inside the
+// quotes at all.
+func TestEscapeFilterArg(t *testing.T) {
+	for _, tc := range []struct {
+		value, expected string
+	}{
+		{"plain", "plain"},
+		{"1280", "1280"},
+		{"-2", "-2"},
+		{"a,b", `'a,b'`},
+		{"a b", `'a b'`},
+		{"a=b", `'a=b'`},
+		{"a:b", `'a\:b'`},
+		{`a\b`, `'a\\b'`},
+		{"a'b", `'a'\\\''b'`},
+		{`it's a:b\c`, `'it'\\\''s a\:b\\c'`},
+		{"eq(pict_type,I)", `'eq(pict_type,I)'`},
+		{"a;b", `'a;b'`},
+		{"a[b]c", `'a[b]c'`},
+		{"FontName=Arial,FontSize=24", `'FontName=Arial,FontSize=24'`},
+	} {
+		if got := escapeFilterArg(tc.value); got != tc.expected {
+			t.Errorf("escapeFilterArg(%q) = %s, want %s", tc.value, got, tc.expected)
+		}
+	}
+}
+
 func TestArgListValidate(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -101,9 +131,11 @@ func TestArgListValidate(t *testing.T) {
 		wantErr bool
 	}{
 		{name: "clean named", args: argList{{Key: "w", Value: "1280"}}},
-		{name: "semicolon in value", args: argList{{Key: "w", Value: "12;80"}}, wantErr: true},
-		{name: "bracket in key", args: argList{{Key: "w[0]", Value: "1280"}}, wantErr: true},
-		{name: "semicolon in positional", args: positionalArgs([]string{"a;b"}), wantErr: true},
+		// Graph separators are quoted rather than rejected: escaping
+		// carries them to the filter whole.
+		{name: "semicolon in value", args: argList{{Key: "t", Value: "12;80"}}},
+		{name: "brackets in value", args: argList{{Key: "t", Value: "a[b]c"}}},
+		{name: "semicolon in positional", args: positionalArgs([]string{"a;b"})},
 		{name: "raw args are the caller's to get right", args: argList{{Value: "a;b", raw: true}}},
 
 		// ffmpeg fills a filter's options positionally only up to the
