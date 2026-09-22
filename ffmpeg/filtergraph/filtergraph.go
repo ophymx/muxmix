@@ -18,9 +18,9 @@
 //
 // Input labels that start with a digit are ffmpeg stream specifiers and
 // need no matching output. Any filter can be built with NewFilter and
-// WithArg for options the builders do not cover. WithArg and
-// WithPositionalArgs both append, in call order, so a filter written
-// head-positional and tail-named comes out that way:
+// WithArg for options the builders do not cover. WithArg,
+// WithPositionalArgs and WithRawArgs all append, in call order, so a filter
+// written head-positional and tail-named comes out that way:
 //
 //	f := filtergraph.NewFilter("pad").
 //		WithPositionalArgs("1280", "720", "-1", "-1").
@@ -30,7 +30,9 @@
 // Keys and values are escaped as ffmpeg's filter syntax requires. ffmpeg
 // takes positional arguments only before the first key=value, the way
 // Python takes positional arguments before keyword ones, so appending a
-// positional argument after a named one fails Validate.
+// positional argument after a named one fails Validate. For an argument
+// string you already hold whole, WithRawArgs and [Raw] pass it through
+// untouched.
 //
 // ffmpeg has no bare-flag form in a filter's arguments: it reads every bare
 // token as the value of the next option the filter declares. WithArg always

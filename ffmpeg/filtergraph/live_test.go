@@ -40,6 +40,7 @@ func TestLiveFilterArgumentOrder(t *testing.T) {
 		// a positional argument, and this would not parse.
 		{"empty value is a named argument", filtergraph.NewFilter("scale").WithArg("w", "1280").WithArg("h", "-2").WithArg("flags", ""), true},
 		{"positional after an empty-valued named argument", filtergraph.NewFilter("pad").WithArg("color", "").WithPositionalArgs("1280", "720"), false},
+		{"raw args carry their own order", filtergraph.NewFilter("pad").WithRawArgs("1280:720:-1:-1:color=black"), true},
 		{"a value needing quotes survives the round trip", filtergraph.NewFilter("drawbox").WithArg("enable", "between(t,0,5)").WithArg("color", "red"), true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

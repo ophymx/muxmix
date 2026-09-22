@@ -76,6 +76,18 @@ func positionalArgs(values []string) argList {
 	return out
 }
 
+// Raw returns arguments that render exactly as given, for an argument
+// string you already hold whole: out of a config file, a saved preset, a
+// command line you are mirroring. The caller owns the escaping — nothing is
+// added, removed or checked, so a stray ";" or "[" reaches ffmpeg and
+// breaks the graph around it.
+//
+//	filtergraph.NewFilter("subtitles").WithArgs(filtergraph.Raw(preset))
+//
+// Use it for what the builders do not model; WithArg and WithPositionalArgs
+// escape correctly and should be preferred where they fit.
+func Raw(s string) FilterArguments { return argList{{Value: s, raw: true}} }
+
 // String renders one argument, escaping key and value separately so that a
 // value containing "=" or "," is quoted while the "key=" introducing it is
 // not.

@@ -66,9 +66,19 @@ func TestArgList(t *testing.T) {
 			expected: "force_style='FontName=Arial,FontSize=24'",
 		},
 		{
+			name:     "raw args pass through unescaped",
+			args:     argList{{Value: "color=black,foo=bar", raw: true}},
+			expected: "color=black,foo=bar",
+		},
+		{
 			name:     "empty raw args add no slot",
 			args:     append(positionalArgs([]string{"1280"}), arg{raw: true}),
 			expected: "1280",
+		},
+		{
+			name:     "raw args after positional",
+			args:     append(positionalArgs([]string{"1280", "720"}), arg{Value: "color=black", raw: true}),
+			expected: "1280:720:color=black",
 		},
 	}
 
@@ -146,6 +156,28 @@ func TestFilterArgBuildersCompose(t *testing.T) {
 			expected: "overlay=10:20",
 		},
 		{
+			name: "raw args after positional",
+			filter: NewFilter("pad").
+				WithPositionalArgs("1280", "720").
+				WithRawArgs("color=black"),
+			expected: "pad=1280:720:color=black",
+		},
+		{
+			name:     "raw args alone keep the caller's escaping",
+			filter:   NewFilter("subtitles").WithRawArgs("f=subs.srt:force_style='FontName=Arial,FontSize=24'"),
+			expected: "subtitles=f=subs.srt:force_style='FontName=Arial,FontSize=24'",
+		},
+		{
+			name:     "empty raw args add nothing",
+			filter:   NewFilter("null").WithRawArgs(""),
+			expected: "null",
+		},
+		{
+			name:     "Raw through WithArgs, then a named arg",
+			filter:   NewFilter("crop").WithArgs(Raw("iw/2:ih/2")).WithArg("exact", "1"),
+			expected: "crop=iw/2:ih/2:exact=1",
+		},
+		{
 			name:     "a caller's own FilterArguments is not discarded",
 			filter:   NewFilter("crop").WithArgs(stubArgs("iw/2:ih/2")).WithArg("exact", "1"),
 			expected: "crop=iw/2:ih/2:exact=1",
@@ -217,6 +249,11 @@ func TestFilterArgsJSONRoundTrip(t *testing.T) {
 			name:     "mixed is an array with the named args as objects",
 			filter:   NewFilter("pad").WithPositionalArgs("1280", "720").WithArg("color", "black"),
 			wantArgs: `["1280","720",{"color":"black"}]`,
+		},
+		{
+			name:     "raw is the one rendered string",
+			filter:   NewFilter("pad").WithPositionalArgs("1280").WithRawArgs("color=black"),
+			wantArgs: `"1280:color=black"`,
 		},
 		{
 			name:     "a value needing quotes keeps its unescaped form",

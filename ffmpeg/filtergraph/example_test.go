@@ -37,3 +37,12 @@ func ExampleFilter_WithPositionalArgs() {
 	fmt.Println(f)
 	// Output: pad=1280:720:-1:-1:color=black
 }
+
+func ExampleFilter_WithRawArgs() {
+	// An argument string read from a config file or preset, already
+	// escaped, attached as it stands.
+	preset := "f=subs.srt:force_style='FontName=Arial,FontSize=24'"
+	f := filtergraph.NewFilter("subtitles").WithRawArgs(preset)
+	fmt.Println(f)
+	// Output: subtitles=f=subs.srt:force_style='FontName=Arial,FontSize=24'
+}

@@ -32,8 +32,8 @@ func (f *Filter) WithInstance(instance string) *Filter {
 }
 
 // WithArgs replaces the filter's arguments with a FilterArguments
-// implementation of your own. Arguments added afterwards by WithArg or
-// WithPositionalArgs are appended to its rendering.
+// implementation of your own, or with [Raw]. Arguments added afterwards by
+// WithArg, WithPositionalArgs or WithRawArgs are appended to its rendering.
 func (f *Filter) WithArgs(args FilterArguments) *Filter {
 	f.Args = args
 	return f
@@ -69,6 +69,12 @@ func (f *Filter) WithArg(key, value string) *Filter {
 // fails Validate and that ffmpeg would reject. See [argList] for why.
 func (f *Filter) WithPositionalArgs(args ...string) *Filter {
 	return f.appendArgs(positionalArgs(args))
+}
+
+// WithRawArgs appends a pre-formed argument string, rendered exactly as
+// given. See [Raw] for what the caller takes on in return.
+func (f *Filter) WithRawArgs(args string) *Filter {
+	return f.appendArgs(argList{{Value: args, raw: true}})
 }
 
 // appendArgs adds to the filter's arguments. Arguments already set through
