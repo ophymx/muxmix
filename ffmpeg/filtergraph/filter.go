@@ -31,30 +31,58 @@ func (f *Filter) WithInstance(instance string) *Filter {
 	return f
 }
 
-// WithArgs sets a custom FilterArguments implementation.
+// WithArgs replaces the filter's arguments with a FilterArguments
+// implementation of your own. Arguments added afterwards by WithArg or
+// WithPositionalArgs are appended to its rendering.
 func (f *Filter) WithArgs(args FilterArguments) *Filter {
 	f.Args = args
 	return f
 }
 
-// WithNamedArgs sets key=value arguments from a map; they render in key
-// order. Use WithArg to control the order.
+// WithNamedArgs replaces the filter's arguments with key=value arguments
+// from a map; they render in key order. Use WithArg to control the order.
 func (f *Filter) WithNamedArgs(args map[string]string) *Filter {
-	f.Args = namedArgsFromMap(args)
+	f.Args = argsFromMap(args)
 	return f
 }
 
-// WithArg appends one key=value argument, keeping the order arguments
-// were added in. It replaces any positional arguments set earlier.
+// WithArg appends one key=value argument. Both the key and the value are
+// escaped as ffmpeg needs. An empty value renders as key= and sets the
+// option to the empty string, which options that take a string accept and
+// options that take a number or an expression reject by name. ffmpeg has no
+// bare-flag form: to pass a value with no key, use WithPositionalArgs.
 func (f *Filter) WithArg(key, value string) *Filter {
-	named, _ := f.Args.(namedArgs)
-	f.Args = append(named, namedArg{key, value})
-	return f
+	return f.appendArgs(argList{{Key: key, Value: value}})
 }
 
-// WithPositionalArgs sets positional arguments for the filter
+// WithPositionalArgs appends positional arguments, each escaped as ffmpeg
+// needs. Positional and named arguments share one ordered list, so calling
+// this and WithArg in the order the filter wants renders that order:
+//
+//	filtergraph.NewFilter("pad").
+//		WithPositionalArgs("1280", "720", "-1", "-1").
+//		WithArg("color", "black") // pad=1280:720:-1:-1:color=black
+//
+// Not every positional slot has to be filled before switching to names —
+// scale=1280:h=-2 is valid — but ffmpeg accepts no positional argument
+// after a named one, so calling this after WithArg builds a filter that
+// fails Validate and that ffmpeg would reject. See [argList] for why.
 func (f *Filter) WithPositionalArgs(args ...string) *Filter {
-	f.Args = positionalArgs(args)
+	return f.appendArgs(positionalArgs(args))
+}
+
+// appendArgs adds to the filter's arguments. Arguments already set through
+// a FilterArguments implementation this package does not own are kept as
+// their rendering, so that nothing a caller passed is dropped.
+func (f *Filter) appendArgs(add argList) *Filter {
+	switch existing := f.Args.(type) {
+	case nil:
+		f.Args = add
+	case argList:
+		f.Args = append(existing, add...)
+	default:
+		f.Args = append(argList{{Value: existing.String(), raw: true}}, add...)
+	}
 	return f
 }
 
@@ -151,11 +179,11 @@ func (f *Filter) MarshalJSON() ([]byte, error) {
 	}
 
 	if f.Args != nil {
-		if kv, ok := f.Args.(namedArgs); ok {
-			aux.Args = kv
-		} else if pos, ok := f.Args.(positionalArgs); ok {
-			aux.Args = []string(pos)
+		if list, ok := f.Args.(argList); ok {
+			aux.Args = list
 		} else {
+			// A FilterArguments implementation of the caller's own: keep
+			// its rendering, which is all that is knowable about it.
 			aux.Args = f.Args.String()
 		}
 	}
@@ -177,21 +205,11 @@ func (f *Filter) UnmarshalJSON(data []byte) error {
 	}
 
 	if len(aux.Args) > 0 {
-		var named namedArgs
-		if err := json.Unmarshal(aux.Args, &named); err == nil {
-			f.Args = named
-		} else {
-			var s []string
-			if err := json.Unmarshal(aux.Args, &s); err == nil {
-				f.Args = positionalArgs(s)
-			} else {
-				var str string
-				if err := json.Unmarshal(aux.Args, &str); err != nil {
-					return fmt.Errorf("failed to unmarshal args: %v", err)
-				}
-				f.Args = namedArgs{{"value", str}}
-			}
+		var args argList
+		if err := json.Unmarshal(aux.Args, &args); err != nil {
+			return fmt.Errorf("failed to unmarshal args: %v", err)
 		}
+		f.Args = args
 	}
 
 	return nil
