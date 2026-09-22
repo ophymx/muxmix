@@ -38,17 +38,27 @@ type arg struct {
 //
 // ffmpeg constrains that order the way Python constrains keyword arguments:
 // positional arguments fill the filter's options in declaration order, and
-// the first key=value gives up the rest of them, so a bare argument after a
-// named one has nothing left to fill and is a parse error rather than a
-// mis-assignment. libavfilter's argument parser reads
+// a bare argument after a named one is not something any release reads the
+// way it is written. The recent ones refuse it. libavfilter's argument
+// parser reads
 //
 //	if (parsed_key) {
 //		key = parsed_key;
 //		priv_class = NULL; /* reject all remaining shorthand */
 //
-// and ffmpeg reports "No option name near '...'". Stopping short is fine —
-// scale=1280:h=-2 fills only w positionally — so the one rule is that every
-// positional argument precedes every named one. Validate enforces it.
+// and ffmpeg reports "No option name near '...'".
+//
+// Up to 6.1 there was no such refusal, and what happened instead is worse:
+// the walk over the filter's options simply carried on from where the
+// named argument left it, so the bare arguments landed on whatever came
+// next. pad=color=black:1280:720 sets height and x rather than width and
+// height, and pads a 64x64 input to 64x1280 without a word. Occasionally
+// the walk lands where you meant — scale=w=200:100 does give 200x100 —
+// which makes the shape harder to catch, not safer to use.
+//
+// Stopping short is fine — scale=1280:h=-2 fills only w positionally — so
+// the one rule that holds on every release is that every positional
+// argument precedes every named one. Validate enforces it.
 type argList []arg
 
 var _ FilterArguments = argList(nil)

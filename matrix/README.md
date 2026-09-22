@@ -12,13 +12,12 @@ and the scripts that capture fixtures from them.
 | `alpine-3.22`  | alpine:3.22     | 6.1.2   |
 | `debian-13`    | debian:trixie   | 7.1.5   |
 | `alpine-edge`  | alpine:edge     | 8.1.2   |
-| `debian-sid`   | debian:sid      | 8.1.2   |
+| `debian-sid`   | debian:sid      | 9.0.2   |
 
-Eight images, six distinct releases: 6.1.1 and 8.1.2 each ship in two of
-them, which is worth keeping because the distributions patch them
-differently. The versions move as the distributions update; the fixture
-directories under `ffprobe/testdata/probe/` are named for whatever was
-captured.
+Eight images, seven distinct releases: 6.1.1 ships in two of them, which is
+worth keeping because the distributions patch them differently. The versions
+move as the distributions update; the fixture directories under
+`ffprobe/testdata/probe/` are named for whatever was captured.
 
 ## Why
 
